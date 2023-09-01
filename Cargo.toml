@@ -1,0 +1,29 @@
+[package]
+name = "linear-logic"
+authors = ["Will Sturgeon <willstrgn@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+description = "Parsing and manipulating linear-logic expressions."
+license = "MPL-2.0"
+repository = "github.com/wrsturgeon/linear-logic"
+readme = "README.md"
+build = "build.rs"
+keywords = ["logic", "mathematics", "substructural", "type", "parse"]
+categories = [
+  "mathematics",
+  "parser-implementations",
+  "data-structures",
+  "encoding",
+  "memory-management",
+]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# none
+
+# Optional dependencies:
+quickcheck = { version = "1.0.3", optional = true }
+
+[features]
+quickcheck = ["dep:quickcheck"]
