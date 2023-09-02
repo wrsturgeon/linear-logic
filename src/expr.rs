@@ -32,7 +32,7 @@
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Expr {
-    /// A raw name, e.g. `A`.
+    /// A raw name: e.g. `A`.
     Name(u8),
     /// The "of course" operator, read as "bang."
     Bang(Box<Expr>),

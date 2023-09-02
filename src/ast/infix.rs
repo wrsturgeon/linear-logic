@@ -27,9 +27,9 @@ pub enum Infix {
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Associativity {
-    /// Left-associative, e.g. `A * B * C`, which translates to `(A * B) * C`.
+    /// Left-associative: e.g. `A * B * C`, which translates to `(A * B) * C`.
     Left,
-    /// Right-associative, e.g. `A -> B -> C`, which translates to `A -> (B -> C)`.
+    /// Right-associative: e.g. `A -> B -> C`, which translates to `A -> (B -> C)`.
     Right,
 }
 

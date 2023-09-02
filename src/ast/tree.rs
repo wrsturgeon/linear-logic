@@ -12,14 +12,14 @@ use crate::ast::{Infix, Name, Prefix};
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum SyntaxAware {
-    /// Raw name, e.g. `A`.
+    /// Raw name: e.g. `A`.
     Value(Name),
-    /// Unary operation, e.g. `?A`.
-    Unary(Prefix, Box<SyntaxAware>),
-    /// Binary operation, e.g. `A * B`.
-    Binary(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
+    /// Unary operation: e.g. `?A`.
+    Unary(Prefix, Box<Tree>),
+    /// Binary operation: e.g. `A * B`.
+    Binary(Box<Tree>, Infix, Box<SyntaxAware>),
     /// Parenthesized tree.
-    Parenthesized(Box<SyntaxAware>),
+    Parenthesized(Box<Tree>),
 }
 
 impl From<SyntaxAware> for Tree {
@@ -27,11 +27,9 @@ impl From<SyntaxAware> for Tree {
     fn from(value: SyntaxAware) -> Self {
         match value {
             SyntaxAware::Value(v) => Tree::Value(v),
-            SyntaxAware::Unary(op, arg) => Tree::Unary(op, Box::new((*arg).into())),
-            SyntaxAware::Binary(lhs, op, rhs) => {
-                Tree::Binary(Box::new((*lhs).into()), op, Box::new((*rhs).into()))
-            }
-            SyntaxAware::Parenthesized(tree) => (*tree).into(),
+            SyntaxAware::Unary(op, arg) => Tree::Unary(op, arg),
+            SyntaxAware::Binary(lhs, op, rhs) => Tree::Binary(lhs, op, Box::new((*rhs).into())),
+            SyntaxAware::Parenthesized(tree) => *tree,
         }
     }
 }
@@ -40,11 +38,11 @@ impl From<SyntaxAware> for Tree {
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Tree {
-    /// Raw name, e.g. `A`.
+    /// Raw name: e.g. `A`.
     Value(Name),
-    /// Unary operation, e.g. `?A`.
+    /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Tree>),
-    /// Binary operation, e.g. `A * B`.
+    /// Binary operation: e.g. `A * B`.
     Binary(Box<Tree>, Infix, Box<Tree>),
 }
 

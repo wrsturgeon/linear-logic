@@ -13,7 +13,7 @@ pub enum Triage<T, W, E> {
     /// Successful result.
     Okay(T),
     /// Result with a warning.
-    Warning(T, W),
+    Warn(T, W),
     /// Error and no result.
     Error(E),
 }
@@ -23,7 +23,7 @@ pub enum Triage<T, W, E> {
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Severity<W, E> {
     /// Not-necessarily-fatal warning.
-    Warning(W),
+    Warn(W),
     /// Fatal error.
     Error(E),
 }
@@ -37,7 +37,7 @@ impl<T, W, E> Triage<T, W, E> {
     pub fn strict(self) -> Result<T, Severity<W, E>> {
         match self {
             Triage::Okay(v) => Ok(v),
-            Triage::Warning(_, w) => Err(Severity::Warning(w)),
+            Triage::Warn(_, w) => Err(Severity::Warn(w)),
             Triage::Error(e) => Err(Severity::Error(e)),
         }
     }
@@ -48,7 +48,7 @@ impl<T, W, E> Triage<T, W, E> {
     #[inline]
     pub fn permissive(self) -> Result<T, E> {
         match self {
-            Triage::Okay(v) | Triage::Warning(v, _) => Ok(v),
+            Triage::Okay(v) | Triage::Warn(v, _) => Ok(v),
             Triage::Error(e) => Err(e),
         }
     }
@@ -58,7 +58,7 @@ impl<T, W, E> Triage<T, W, E> {
     pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Triage<U, W, E> {
         match self {
             Triage::Okay(v) => Triage::Okay(f(v)),
-            Triage::Warning(v, w) => Triage::Warning(f(v), w),
+            Triage::Warn(v, w) => Triage::Warn(f(v), w),
             Triage::Error(e) => Triage::Error(e),
         }
     }
@@ -69,8 +69,8 @@ impl<T, W, E> Triage<T, W, E> {
     pub fn and_then<U, F: FnOnce(T) -> Triage<U, W, E>>(self, f: F) -> Triage<U, W, E> {
         match self {
             Triage::Okay(v) => f(v),
-            Triage::Warning(v, w) => match f(v) {
-                Triage::Okay(u) | Triage::Warning(u, _) => Triage::Warning(u, w),
+            Triage::Warn(v, w) => match f(v) {
+                Triage::Okay(u) | Triage::Warn(u, _) => Triage::Warn(u, w),
                 Triage::Error(e) => Triage::Error(e),
             },
             Triage::Error(e) => Triage::Error(e),
@@ -92,5 +92,40 @@ impl<T> OptionTriage for Option<T> {
     #[inline(always)]
     fn triage<W, E>(self, err: E) -> Triage<Self::Value, W, E> {
         self.map_or(Triage::Error(err), Triage::Okay)
+    }
+}
+
+/// Map `Some` to `Triage::Warn` and `None` to the provided value.
+pub trait OptionWarn {
+    /// Type of warning.
+    type Warning;
+    /// Map `Some` to `Triage::Warn` and `None` to `Triage::Okay`.
+    fn warn_or<T, E>(self, value: T) -> Triage<T, Self::Warning, E>;
+    /// Map `Some` to `Triage::Warn` and `None` to the provided value.
+    fn warn_and_then<T, E>(self, value: Triage<T, Self::Warning, E>)
+        -> Triage<T, Self::Warning, E>;
+}
+
+impl<W> OptionWarn for Option<W> {
+    type Warning = W;
+    #[inline(always)]
+    fn warn_or<T, E>(self, value: T) -> Triage<T, Self::Warning, E> {
+        match self {
+            None => Triage::Okay(value),
+            Some(w) => Triage::Warn(value, w),
+        }
+    }
+    #[inline(always)]
+    fn warn_and_then<T, E>(
+        self,
+        value: Triage<T, Self::Warning, E>,
+    ) -> Triage<T, Self::Warning, E> {
+        match self {
+            None => value,
+            Some(w) => match value {
+                Triage::Okay(v) | Triage::Warn(v, _) => Triage::Warn(v, w),
+                Triage::Error(e) => Triage::Error(e),
+            },
+        }
     }
 }
