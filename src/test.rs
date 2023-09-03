@@ -229,6 +229,26 @@ mod reduced {
     }
 
     #[test]
+    fn roundtrip_expr_bytes_6() {
+        let tree = ast::Tree::Unary(
+            ast::Prefix::Bang,
+            Box::new(ast::Tree::Binary(
+                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                ast::Infix::Times,
+                Box::new(ast::Tree::Binary(
+                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    ast::Infix::Times,
+                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                )),
+            )),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "!(A * (B * C))");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_1() {
         assert_eq!(

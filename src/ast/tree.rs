@@ -35,7 +35,6 @@ impl SyntaxAware {
         lnbr: Option<Infix>,
         rnbr: Option<Infix>,
     ) -> Triage<Tree, parse::Warning, parse::Error> {
-        #[allow(clippy::wildcard_enum_match_arm)] // FIXME: remove
         match self {
             SyntaxAware::Value(v) => Triage::Okay(Tree::Value(v)),
             SyntaxAware::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
@@ -52,8 +51,8 @@ impl SyntaxAware {
                 Triage::Warn((), parse::Warning::UnnecessaryParens)
             }
             .and_then(|()| {
-                lhs.into_tree(None, None).and_then(|tl| {
-                    rhs.into_tree(None, None)
+                lhs.into_tree(None, Some(op)).and_then(|tl| {
+                    rhs.into_tree(Some(op), None)
                         .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
                 })
             }),

@@ -31,10 +31,12 @@ impl Nonbinary {
         match self {
             Nonbinary::Value(v) => Triage::Okay(Tree::Value(v)),
             Nonbinary::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
-            Nonbinary::Parenthesized(lhs, op, rhs) => lhs.into_tree(None, None).and_then(|tl| {
-                rhs.into_tree(None, None)
-                    .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
-            }),
+            Nonbinary::Parenthesized(lhs, op, rhs) => {
+                lhs.into_tree(None, Some(op)).and_then(|tl| {
+                    rhs.into_tree(Some(op), None)
+                        .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+                })
+            }
         }
     }
 }
