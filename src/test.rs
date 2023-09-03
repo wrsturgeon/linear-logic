@@ -349,10 +349,7 @@ mod systematic {
     enum Character {
         A,
         Unary,
-        Times,
-        Plus,
-        With,
-        Par,
+        Binary,
         LParen,
         RParen,
         Space,
@@ -364,10 +361,7 @@ mod systematic {
             match value {
                 Character::A => 'A',
                 Character::Unary => '!',
-                Character::Times => '*',
-                Character::Plus => '+',
-                Character::With => '&',
-                Character::Par => crate::ast::PAR,
+                Character::Binary => '*',
                 Character::LParen => '(',
                 Character::RParen => ')',
                 Character::Space => ' ',
@@ -382,13 +376,10 @@ mod systematic {
             match value {
                 0 => Character::A,
                 1 => Character::Unary,
-                2 => Character::Times,
-                3 => Character::Plus,
-                4 => Character::With,
-                5 => Character::Par,
-                6 => Character::LParen,
-                7 => Character::RParen,
-                8 => Character::Space,
+                2 => Character::Binary,
+                3 => Character::LParen,
+                4 => Character::RParen,
+                5 => Character::Space,
                 _ => unreachable!(),
             }
         }
@@ -396,21 +387,18 @@ mod systematic {
 
     #[test]
     fn exhaustive_and_valid_iff_both_unique_and_shortest() {
-        const MIN_LEN: usize = 1;
-        const MAX_LEN: usize = 11; // TODO: way up
-        let mut v = vec![];
-        while v.len() < MIN_LEN {
-            v.push(0);
-        }
+        let mut v = vec![0];
         let mut seen = std::collections::HashSet::new();
-        // Depth 2 exhausted with length 11
-        let mut exhaustive = ast::Tree::exhaustive_up_to_depth(2); // TODO: way up
+        let mut exhaustive = ast::Tree::exhaustive_up_to_depth(3);
         {
             let len = exhaustive.len();
             exhaustive.dedup();
             assert_eq!(len, exhaustive.len()); // no-op
         }
         exhaustive.sort();
+        let max_len = exhaustive
+            .iter()
+            .fold(0, |acc, t| acc.max(format!("{t}").len()));
         let mut exhausted: Vec<_> = exhaustive.iter().map(|_| false).collect();
         assert_eq!(exhaustive.len(), exhausted.len());
         'check: loop {
@@ -449,7 +437,7 @@ mod systematic {
             'carry: loop {
                 #[allow(clippy::get_unwrap, unsafe_code)]
                 let c = v.get_mut(i).unwrap();
-                if *c < 8 {
+                if *c < 5 {
                     *c += 1;
                     continue 'check;
                 }
@@ -458,7 +446,7 @@ mod systematic {
                     i = decr;
                     continue 'carry;
                 }
-                if v.len() < MAX_LEN {
+                if v.len() < max_len {
                     v.push(0);
                     continue 'check;
                 }

@@ -334,10 +334,6 @@ where
 #[inline]
 #[allow(clippy::similar_names)]
 fn fix_precedence(lhs: SyntaxAware, op: Infix, rhs: Nonbinary) -> SyntaxAware {
-    #[allow(clippy::print_stdout, clippy::use_debug)]
-    {
-        println!("fix_precedence({lhs:?}, {op:?}, {rhs:?})");
-    }
     match lhs {
         // No problem unless the left-hand side is a binary operation
         SyntaxAware::Value(_) | SyntaxAware::Unary(_, _) | SyntaxAware::Parenthesized(_, _, _) => {
