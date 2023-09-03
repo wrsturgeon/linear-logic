@@ -6,28 +6,6 @@
 
 //! Linear-logic expressions as heap trees.
 
-// pub enum Prefix {
-//     Bang,
-//     Quest,
-// }
-
-// pub struct Prefixed {
-//     name: u8,
-//     prefixes: Vec<Prefix>,
-// }
-
-// pub enum Infix {
-//     Times,
-//     Plus,
-//     With,
-//     Par,
-// }
-
-// pub struct Flattened {
-//     head: Prefixed,
-//     tail: Vec<(Infix, Prefixed)>,
-// }
-
 /// Linear-logic expressions as heap trees.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

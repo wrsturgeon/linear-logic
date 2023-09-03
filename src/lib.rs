@@ -84,9 +84,6 @@ pub mod ast;
 pub mod parse;
 mod triage;
 
-// mod expr;
-// pub use expr::Expr;
-
 pub use {
     parse::parse,
     triage::{OptionTriage, Severity, Triage},

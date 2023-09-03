@@ -15,10 +15,10 @@ pub const PAR: char = '@';
 pub enum Infix {
     /// Additive disjunction, read as "plus."
     Plus,
-    /// Multiplicative disjunction, read as "par."
-    Par,
     /// Additive conjunction, read as "with."
     With,
+    /// Multiplicative disjunction, read as "par."
+    Par,
     /// Multiplicative conjunction, read as "times" or "tensor."
     Times,
 }
@@ -93,10 +93,10 @@ impl quickcheck::Arbitrary for Infix {
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            &Infix::Times => Box::new(core::iter::empty()),
-            &Infix::Plus => Box::new(core::iter::once(Infix::Times)),
-            &Infix::With => Box::new([Infix::Times, Infix::Plus].into_iter()),
-            &Infix::Par => Box::new([Infix::Times, Infix::Plus, Infix::With].into_iter()),
+            &Infix::Plus => Box::new(core::iter::empty()),
+            &Infix::With => Box::new(core::iter::once(Infix::Plus)),
+            &Infix::Par => Box::new([Infix::Plus, Infix::With].into_iter()),
+            &Infix::Times => Box::new([Infix::Plus, Infix::With, Infix::Par].into_iter()),
         }
     }
 }

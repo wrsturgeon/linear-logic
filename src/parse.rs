@@ -7,7 +7,7 @@
 //! Parsing linear-logic expressions.
 
 use crate::{
-    ast::{self, tree::SyntaxAware, Infix, Name, Nonbinary, Prefix, Tree, PAR},
+    ast::{tree::SyntaxAware, Infix, Name, Nonbinary, Prefix, Tree, PAR},
     Triage,
 };
 
@@ -196,15 +196,11 @@ where
                 return warn.max(Triage::Warn((), w)).map(|()| acc);
             }
             Triage::Okay(Some((op, arg))) => {
-                let (prec, _, maybe_warn) = fix_precedence(None, acc, op, arg, None);
-                acc = prec;
-                if let Some(w) = maybe_warn {
-                    warn = warn.max(Triage::Warn((), w));
-                }
+                acc = fix_precedence(acc, op, arg);
             }
             Triage::Warn(Some((op, arg)), w) => {
                 warn = warn.max(Triage::Warn((), w));
-                acc = fix_precedence(None, acc, op, arg, None).0;
+                acc = fix_precedence(acc, op, arg);
             }
             Triage::Error(e) => return Triage::Error(e),
         }
@@ -337,60 +333,27 @@ where
 /// Resolve operator precedence for a single operation.
 #[inline]
 #[allow(clippy::similar_names)]
-fn fix_precedence(
-    _lnbr: Option<Infix>,
-    lhs: SyntaxAware,
-    op: Infix,
-    rhs: Nonbinary,
-    _rnbr: Option<Infix>,
-) -> (SyntaxAware, Option<Infix>, Option<Warning>) {
+fn fix_precedence(lhs: SyntaxAware, op: Infix, rhs: Nonbinary) -> SyntaxAware {
+    #[allow(clippy::print_stdout, clippy::use_debug)]
+    {
+        println!("fix_precedence({lhs:?}, {op:?}, {rhs:?})");
+    }
     match lhs {
         // No problem unless the left-hand side is a binary operation
-        SyntaxAware::Value(_) | SyntaxAware::Unary(_, _) | SyntaxAware::Parenthesized(_, _, _) => (
-            SyntaxAware::Binary(Box::new(lhs), op, Box::new(rhs.into())),
-            None,
-            None,
-        ),
+        SyntaxAware::Value(_) | SyntaxAware::Unary(_, _) | SyntaxAware::Parenthesized(_, _, _) => {
+            SyntaxAware::Binary(Box::new(lhs), op, Box::new(rhs.into()))
+        }
         // Operator precedence time
-        SyntaxAware::Binary(llhs, lop, lrhs) => match lop.cmp(&op) {
-            core::cmp::Ordering::Less => (
+        SyntaxAware::Binary(llhs, lop, lrhs) => {
+            if lop.weaker_to_the_left_of(op) {
+                SyntaxAware::Binary(llhs, lop, Box::new(fix_precedence(*lrhs, op, rhs)))
+            } else {
                 SyntaxAware::Binary(
                     Box::new(SyntaxAware::Binary(llhs, lop, lrhs)),
                     op,
                     Box::new(rhs.into()),
-                ),
-                None,
-                None,
-            ),
-            core::cmp::Ordering::Equal => match op.associativity() {
-                ast::Associativity::Left => (
-                    SyntaxAware::Binary(
-                        Box::new(SyntaxAware::Binary(llhs, lop, lrhs)),
-                        op,
-                        Box::new(rhs.into()),
-                    ),
-                    None,
-                    None,
-                ),
-                ast::Associativity::Right => (
-                    SyntaxAware::Binary(
-                        llhs,
-                        lop,
-                        Box::new(SyntaxAware::Binary(lrhs, op, Box::new(rhs.into()))),
-                    ),
-                    None,
-                    None,
-                ),
-            },
-            core::cmp::Ordering::Greater => (
-                SyntaxAware::Binary(
-                    llhs,
-                    lop,
-                    Box::new(SyntaxAware::Binary(lrhs, op, Box::new(rhs.into()))),
-                ),
-                None,
-                None,
-            ),
-        },
+                )
+            }
+        }
     }
 }

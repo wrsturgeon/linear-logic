@@ -41,17 +41,6 @@ impl Nonbinary {
     }
 }
 
-// impl From<Nonbinary> for Tree {
-//     #[inline]
-//     fn from(value: Nonbinary) -> Self {
-//         match value {
-//             Nonbinary::Value(c) => Tree::Value(c),
-//             Nonbinary::Unary(op, arg) => Tree::Unary(op, Box::new((*arg).into())),
-//             Nonbinary::Parenthesized(tree) => *tree,
-//         }
-//     }
-// }
-
 impl From<Nonbinary> for SyntaxAware {
     #[inline]
     fn from(value: Nonbinary) -> Self {

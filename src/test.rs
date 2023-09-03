@@ -58,11 +58,27 @@ mod unit {
     #[test]
     fn times() {
         assert_eq!(
-            parse("A * A".chars()),
+            parse("A * B".chars()),
             Triage::Okay(ast::Tree::Binary(
                 Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
                 ast::Infix::Times,
+                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+            )),
+        );
+    }
+
+    #[test]
+    fn plus_times_no_paren() {
+        assert_eq!(
+            parse("A + B * C".chars()),
+            Triage::Okay(ast::Tree::Binary(
                 Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                ast::Infix::Plus,
+                Box::new(ast::Tree::Binary(
+                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    ast::Infix::Times,
+                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                )),
             )),
         );
     }
@@ -249,6 +265,27 @@ mod reduced {
     }
 
     #[test]
+    fn roundtrip_expr_bytes_7() {
+        let tree = ast::Tree::Binary(
+            Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+            ast::Infix::Plus,
+            Box::new(ast::Tree::Binary(
+                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                ast::Infix::With,
+                Box::new(ast::Tree::Binary(
+                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                    ast::Infix::Par,
+                    Box::new(ast::Tree::Value(Name::from_char('D').strict().unwrap())),
+                )),
+            )),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "A + B & C @ D");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_1() {
         assert_eq!(
@@ -312,7 +349,10 @@ mod systematic {
     enum Character {
         A,
         Unary,
-        Binary,
+        Times,
+        Plus,
+        With,
+        Par,
         LParen,
         RParen,
         Space,
@@ -324,7 +364,10 @@ mod systematic {
             match value {
                 Character::A => 'A',
                 Character::Unary => '!',
-                Character::Binary => '*',
+                Character::Times => '*',
+                Character::Plus => '+',
+                Character::With => '&',
+                Character::Par => crate::ast::PAR,
                 Character::LParen => '(',
                 Character::RParen => ')',
                 Character::Space => ' ',
@@ -339,10 +382,13 @@ mod systematic {
             match value {
                 0 => Character::A,
                 1 => Character::Unary,
-                2 => Character::Binary,
-                3 => Character::LParen,
-                4 => Character::RParen,
-                5 => Character::Space,
+                2 => Character::Times,
+                3 => Character::Plus,
+                4 => Character::With,
+                5 => Character::Par,
+                6 => Character::LParen,
+                7 => Character::RParen,
+                8 => Character::Space,
                 _ => unreachable!(),
             }
         }
@@ -403,7 +449,7 @@ mod systematic {
             'carry: loop {
                 #[allow(clippy::get_unwrap, unsafe_code)]
                 let c = v.get_mut(i).unwrap();
-                if *c < 5 {
+                if *c < 8 {
                     *c += 1;
                     continue 'check;
                 }
