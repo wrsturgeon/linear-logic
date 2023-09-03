@@ -13,14 +13,14 @@ pub const PAR: char = '@';
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Infix {
-    /// Multiplicative conjunction, read as "times" or "tensor."
-    Times,
     /// Additive disjunction, read as "plus."
     Plus,
-    /// Additive conjunction, read as "with."
-    With,
     /// Multiplicative disjunction, read as "par."
     Par,
+    /// Additive conjunction, read as "with."
+    With,
+    /// Multiplicative conjunction, read as "times" or "tensor."
+    Times,
 }
 
 /// Left- or right-associativity.
@@ -40,6 +40,28 @@ impl Infix {
     pub const fn associativity(self) -> Associativity {
         match self {
             Infix::Times | Infix::Plus | Infix::With | Infix::Par => Associativity::Left,
+        }
+    }
+
+    /// Whether an operator to the right would bind more strongly.
+    #[inline]
+    #[must_use]
+    pub fn weaker_to_the_left_of(self, other: Infix) -> bool {
+        match self.cmp(&other) {
+            core::cmp::Ordering::Less => true,
+            core::cmp::Ordering::Equal => self.associativity() == Associativity::Right,
+            core::cmp::Ordering::Greater => false,
+        }
+    }
+
+    /// Whether an operator to the right would bind more strongly.
+    #[inline]
+    #[must_use]
+    pub fn weaker_to_the_right_of(self, other: Infix) -> bool {
+        match self.cmp(&other) {
+            core::cmp::Ordering::Less => true,
+            core::cmp::Ordering::Equal => self.associativity() == Associativity::Left,
+            core::cmp::Ordering::Greater => false,
         }
     }
 }

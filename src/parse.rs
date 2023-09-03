@@ -7,27 +7,24 @@
 //! Parsing linear-logic expressions.
 
 use crate::{
-    ast::{self, Infix, Name, Nonbinary, Prefix, SyntaxAware, Tree, PAR},
-    OptionWarn, Triage,
+    ast::{self, tree::SyntaxAware, Infix, Name, Nonbinary, Prefix, Tree, PAR},
+    Triage,
 };
-
-/// Integer type to hold parenthesis depth.
-type Depth = u8;
 
 /// Any non-fatal warning that could occur parsing a linear-logic expression.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Warning {
-    /// Leading separated: e.g. ` A`.
-    LeadingSpace,
-    /// Trailing separated: e.g. `A `.
-    TrailingSpace,
-    /// Missing a space between operators: e.g. `A&B`.
-    MissingInfixSpace(char),
+    /// Unnecessary parentheses: e.g. `(A)`.
+    UnnecessaryParens,
     /// Too many spaces between operators: e.g. `A  &  B` or even `! A`.
     UnnecessarySpace,
-    /// Unnecessary parentheses: e.g. `(A)`.
-    UnnecessaryParentheses,
+    /// Trailing separated: e.g. `A `.
+    TrailingSpace,
+    /// Leading separated: e.g. ` A`.
+    LeadingSpace,
+    /// Missing a space between operators: e.g. `A&B`.
+    MissingInfixSpace,
 }
 
 /// Any fatal error that could occur parsing a linear-logic expression.
@@ -54,39 +51,42 @@ pub enum Error {
     MissingRightParen,
     /// Invalid name.
     InvalidName(char),
-    /// Maximum parenthesis depth exceeded: e.g. `((((((((...))))))))`.
-    MaxDepth,
     #[cfg(test)]
     /// State not separated when calling `start`. Internal use only.
     StateNotSeparated(Vec<char>),
+    /// Maximum parentheses depth exceeded: e.g. `((((((((((...))))))))))`
+    MaxDepth,
 }
 
+/// Type to hold the number of parentheses around an expression.
+type Depth = u8;
+
 /// State while parsing.
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct State {
-    /// Whether we're inside parentheses.
-    pub(crate) depth: Depth,
     /// Whether the last character was a space (unstable: . . . or a unary operator).
     pub(crate) separated: bool,
+    /// Layers of parenthesization.
+    pub(crate) depth: Depth,
 }
 
 #[allow(clippy::derivable_impls)]
 impl Default for State {
     fn default() -> Self {
         State {
-            depth: 0,
             separated: true,
+            depth: 0,
         }
     }
 }
 
 impl State {
     /// Warn if the preceding character was not a space.
-    pub(crate) const fn check_sep(self, c: char) -> Triage<(), Warning, Error> {
+    pub(crate) const fn check_sep(&self) -> Triage<(), Warning, Error> {
         if self.separated {
             Triage::Okay(())
         } else {
-            Triage::Warn((), Warning::MissingInfixSpace(c))
+            Triage::Warn((), Warning::MissingInfixSpace)
         }
     }
 }
@@ -98,7 +98,7 @@ impl State {
 //             Self::UnrecognizedPrefix(c, v) => {
 //                 write!(
 //                     f,
-//                     "Unrecognized prefix operator '{}'. Rest of the input: `{v:#?}`",
+//                     "Unrecognized prefix operator '{}'. Rest of the input: `{v:?}`",
 //                     c.escape_default(),
 //                 )
 //             }
@@ -112,16 +112,16 @@ pub fn parse<I: IntoIterator>(i: I) -> Triage<Tree, Warning, Error>
 where
     I::Item: Into<char>,
 {
-    start(&mut i.into_iter(), &mut State::default())
+    start(&mut i.into_iter(), &mut State::default()).and_then(|sa| sa.into_tree(None, None))
 }
 
 /// Parse a linear-logic expression from the beginning.
 #[inline]
-fn start<I: Iterator>(i: &mut I, state: &mut State) -> Triage<Tree, Warning, Error>
+fn start<I: Iterator>(i: &mut I, state: &mut State) -> Triage<SyntaxAware, Warning, Error>
 where
     I::Item: Into<char>,
 {
-    let mut warn = None;
+    let mut warn = Triage::Okay(());
     loop {
         #[cfg(test)]
         {
@@ -129,36 +129,50 @@ where
                 return Triage::Error(Error::StateNotSeparated(i.map(Into::into).collect()));
             }
         }
-        return warn.warn_and_then(match i.next() {
+        let ok = match i.next() {
             None => Triage::Error(Error::EmptyExpression),
             Some(c) => match c.into() {
-                '!' => state.check_sep('!').and_then(|_| {
+                '!' => state.check_sep().and_then(|_| {
                     nonbinary(i, state).map(|nb| Nonbinary::Unary(Prefix::Bang, Box::new(nb)))
                 }),
-                '?' => state.check_sep('?').and_then(|_| {
+                '?' => state.check_sep().and_then(|_| {
                     nonbinary(i, state).map(|nb| Nonbinary::Unary(Prefix::Quest, Box::new(nb)))
                 }),
-                '(' => state.check_sep('(').and_then(|_| {
-                    if let Some(deeper) = state.depth.checked_add(1) {
-                        state.depth = deeper;
+                '(' => state.check_sep().and_then(|_| {
+                    if let Some(incr) = state.depth.checked_add(1) {
+                        state.depth = incr;
                     } else {
                         return Triage::Error(Error::MaxDepth);
                     }
-                    start(i, state).map(|nb| Nonbinary::Parenthesized(Box::new(nb)))
+                    start(i, state).and_then(|sa| match sa {
+                        SyntaxAware::Binary(lhs, op, rhs) => {
+                            Triage::Okay(Nonbinary::Parenthesized(lhs, op, rhs))
+                        }
+                        SyntaxAware::Value(name) => {
+                            Triage::Warn(Nonbinary::Value(name), Warning::UnnecessaryParens)
+                        }
+                        SyntaxAware::Unary(op, arg) => {
+                            Triage::Warn(Nonbinary::Unary(op, arg), Warning::UnnecessaryParens)
+                        }
+                        SyntaxAware::Parenthesized(lhs, op, rhs) => Triage::Warn(
+                            Nonbinary::Parenthesized(lhs, op, rhs),
+                            Warning::UnnecessaryParens,
+                        ),
+                    })
                 }),
                 ')' => Triage::Error(Error::EmptyExpression),
                 ' ' => {
-                    #[allow(clippy::let_underscore_must_use)]
-                    let _ = warn.get_or_insert(Warning::LeadingSpace);
+                    warn = warn.max(Triage::Warn((), Warning::LeadingSpace));
                     continue;
                 }
-                name => state.check_sep(name).and_then(|_| {
+                name => state.check_sep().and_then(|_| {
                     state.separated = false;
                     Name::from_char(name).map(Nonbinary::Value)
                 }),
             }
-            .and_then(|nb| tail(i, state, nb).map(Into::into)),
-        });
+            .and_then(|nb| tail(i, state, nb)),
+        };
+        return warn.and_then(|()| ok);
     }
 }
 
@@ -174,18 +188,23 @@ where
 {
     let mut acc = SyntaxAware::from(nb);
     #[allow(clippy::shadow_unrelated)]
-    let mut warn = None;
+    let mut warn = Triage::Okay(());
     loop {
         match next_op(i, state) {
-            Triage::Okay(None) => return warn.warn_or(acc),
+            Triage::Okay(None) => return warn.map(|()| acc),
             Triage::Warn(None, w) => {
-                return Triage::Warn(acc, warn.unwrap_or(w));
+                return warn.max(Triage::Warn((), w)).map(|()| acc);
             }
-            Triage::Okay(Some((op, arg))) => acc = fix_precedence(acc, op, arg),
+            Triage::Okay(Some((op, arg))) => {
+                let (prec, _, maybe_warn) = fix_precedence(None, acc, op, arg, None);
+                acc = prec;
+                if let Some(w) = maybe_warn {
+                    warn = warn.max(Triage::Warn((), w));
+                }
+            }
             Triage::Warn(Some((op, arg)), w) => {
-                #[allow(clippy::let_underscore_must_use)]
-                let _ = warn.get_or_insert(w);
-                acc = fix_precedence(acc, op, arg);
+                warn = warn.max(Triage::Warn((), w));
+                acc = fix_precedence(None, acc, op, arg, None).0;
             }
             Triage::Error(e) => return Triage::Error(e),
         }
@@ -199,41 +218,56 @@ fn nonbinary<I: Iterator>(i: &mut I, state: &mut State) -> Triage<Nonbinary, War
 where
     I::Item: Into<char>,
 {
-    let mut warn = None;
+    let mut warn = Triage::Okay(());
     loop {
-        return warn.warn_and_then(if let Some(c) = i.next() {
+        let ok = if let Some(c) = i.next() {
             match c.into() {
-                '!' => state.check_sep('!').and_then(|_| {
+                '!' => state.check_sep().and_then(|_| {
                     nonbinary(i, state).map(|nb| Nonbinary::Unary(Prefix::Bang, Box::new(nb)))
                 }),
-                '?' => state.check_sep('?').and_then(|_| {
+                '?' => state.check_sep().and_then(|_| {
                     nonbinary(i, state).map(|nb| Nonbinary::Unary(Prefix::Quest, Box::new(nb)))
                 }),
-                '(' => state.check_sep('(').and_then(|_| {
-                    if let Some(deeper) = state.depth.checked_add(1) {
-                        state.depth = deeper;
+                '(' => state.check_sep().and_then(|_| {
+                    if let Some(incr) = state.depth.checked_add(1) {
+                        state.depth = incr;
                     } else {
                         return Triage::Error(Error::MaxDepth);
                     }
-                    start(i, state).map(|flat| Nonbinary::Parenthesized(Box::new(flat)))
+                    start(i, state).and_then(|sa| match sa {
+                        SyntaxAware::Binary(lhs, op, rhs) => {
+                            Triage::Okay(Nonbinary::Parenthesized(lhs, op, rhs))
+                        }
+                        SyntaxAware::Value(name) => {
+                            Triage::Warn(Nonbinary::Value(name), Warning::UnnecessaryParens)
+                        }
+                        SyntaxAware::Unary(op, arg) => {
+                            Triage::Warn(Nonbinary::Unary(op, arg), Warning::UnnecessaryParens)
+                        }
+                        SyntaxAware::Parenthesized(lhs, op, arg) => Triage::Warn(
+                            Nonbinary::Parenthesized(lhs, op, arg),
+                            Warning::UnnecessaryParens,
+                        ),
+                    })
                 }),
                 ')' => Triage::Error(Error::InfixWithoutRightOperand),
                 ' ' => {
                     if state.separated {
-                        let _ = warn.get_or_insert(Warning::UnnecessarySpace);
+                        warn = warn.max(Triage::Warn((), Warning::UnnecessarySpace));
                     } else {
                         state.separated = true;
                     }
                     continue;
                 }
-                name => state.check_sep(name).and_then(|_| {
+                name => state.check_sep().and_then(|_| {
                     state.separated = false;
                     Name::from_char(name).map(Nonbinary::Value)
                 }),
             }
         } else {
             Triage::Error(Error::End)
-        });
+        };
+        return warn.and_then(|()| ok);
     }
 }
 
@@ -246,37 +280,37 @@ fn next_op<I: Iterator>(
 where
     I::Item: Into<char>,
 {
-    let mut warn = None;
+    let mut warn = Triage::Okay(());
     loop {
-        return warn.warn_and_then(if let Some(c) = i.next() {
+        let ok = if let Some(c) = i.next() {
             match c.into() {
                 ' ' => {
                     if state.separated {
-                        let _ = warn.get_or_insert(Warning::UnnecessarySpace);
+                        warn = warn.max(Triage::Warn((), Warning::UnnecessarySpace));
                     } else {
                         state.separated = true;
                     }
                     continue;
                 }
-                '*' => state.check_sep('*').and_then(|_| {
+                '*' => state.check_sep().and_then(|_| {
                     state.separated = false;
                     nonbinary(i, state).map(|nb| Some((Infix::Times, nb)))
                 }),
-                '+' => state.check_sep('+').and_then(|_| {
+                '+' => state.check_sep().and_then(|_| {
                     state.separated = false;
                     nonbinary(i, state).map(|nb| Some((Infix::Plus, nb)))
                 }),
-                '&' => state.check_sep('&').and_then(|_| {
+                '&' => state.check_sep().and_then(|_| {
                     state.separated = false;
                     nonbinary(i, state).map(|nb| Some((Infix::With, nb)))
                 }),
-                PAR => state.check_sep(PAR).and_then(|_| {
+                PAR => state.check_sep().and_then(|_| {
                     state.separated = false;
                     nonbinary(i, state).map(|nb| Some((Infix::Par, nb)))
                 }),
                 ')' => {
-                    if let Some(deeper) = state.depth.checked_sub(1) {
-                        state.depth = deeper;
+                    if let Some(decr) = state.depth.checked_sub(1) {
+                        state.depth = decr;
                         if state.separated {
                             state.separated = false;
                             Triage::Warn(None, Warning::TrailingSpace)
@@ -295,49 +329,67 @@ where
             Triage::Warn(None, Warning::TrailingSpace)
         } else {
             Triage::Okay(None)
-        });
+        };
+        return warn.and_then(|()| ok);
     }
 }
 
 /// Resolve operator precedence for a single operation.
 #[inline]
-fn fix_precedence(lhs: SyntaxAware, op: Infix, rhs: Nonbinary) -> SyntaxAware {
+#[allow(clippy::similar_names)]
+fn fix_precedence(
+    _lnbr: Option<Infix>,
+    lhs: SyntaxAware,
+    op: Infix,
+    rhs: Nonbinary,
+    _rnbr: Option<Infix>,
+) -> (SyntaxAware, Option<Infix>, Option<Warning>) {
     match lhs {
         // No problem unless the left-hand side is a binary operation
-        SyntaxAware::Value(_) | SyntaxAware::Unary(_, _) | SyntaxAware::Parenthesized(_) => {
-            SyntaxAware::Binary(Box::new(lhs.into()), op, Box::new(rhs.into()))
-        }
+        SyntaxAware::Value(_) | SyntaxAware::Unary(_, _) | SyntaxAware::Parenthesized(_, _, _) => (
+            SyntaxAware::Binary(Box::new(lhs), op, Box::new(rhs.into())),
+            None,
+            None,
+        ),
         // Operator precedence time
         SyntaxAware::Binary(llhs, lop, lrhs) => match lop.cmp(&op) {
-            core::cmp::Ordering::Less => SyntaxAware::Binary(
-                Box::new(Tree::Binary(llhs, lop, Box::new((*lrhs).into()))),
-                op,
-                Box::new(rhs.into()),
+            core::cmp::Ordering::Less => (
+                SyntaxAware::Binary(
+                    Box::new(SyntaxAware::Binary(llhs, lop, lrhs)),
+                    op,
+                    Box::new(rhs.into()),
+                ),
+                None,
+                None,
             ),
             core::cmp::Ordering::Equal => match op.associativity() {
-                ast::Associativity::Left => SyntaxAware::Binary(
-                    Box::new(Tree::Binary(llhs, lop, Box::new((*lrhs).into()))),
-                    op,
-                    Box::new(rhs.into()),
-                ),
-                ast::Associativity::Right => SyntaxAware::Binary(
-                    llhs,
-                    lop,
-                    Box::new(SyntaxAware::Binary(
-                        Box::new((*lrhs).into()),
+                ast::Associativity::Left => (
+                    SyntaxAware::Binary(
+                        Box::new(SyntaxAware::Binary(llhs, lop, lrhs)),
                         op,
                         Box::new(rhs.into()),
-                    )),
+                    ),
+                    None,
+                    None,
+                ),
+                ast::Associativity::Right => (
+                    SyntaxAware::Binary(
+                        llhs,
+                        lop,
+                        Box::new(SyntaxAware::Binary(lrhs, op, Box::new(rhs.into()))),
+                    ),
+                    None,
+                    None,
                 ),
             },
-            core::cmp::Ordering::Greater => SyntaxAware::Binary(
-                llhs,
-                lop,
-                Box::new(SyntaxAware::Binary(
-                    Box::new((*lrhs).into()),
-                    op,
-                    Box::new(rhs.into()),
-                )),
+            core::cmp::Ordering::Greater => (
+                SyntaxAware::Binary(
+                    llhs,
+                    lop,
+                    Box::new(SyntaxAware::Binary(lrhs, op, Box::new(rhs.into()))),
+                ),
+                None,
+                None,
             ),
         },
     }

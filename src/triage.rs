@@ -66,11 +66,15 @@ impl<T, W, E> Triage<T, W, E> {
     /// Apply a function to a successful or warned value.
     /// monadic af <3
     #[inline]
-    pub fn and_then<U, F: FnOnce(T) -> Triage<U, W, E>>(self, f: F) -> Triage<U, W, E> {
+    pub fn and_then<U, F: FnOnce(T) -> Triage<U, W, E>>(self, f: F) -> Triage<U, W, E>
+    where
+        W: Ord,
+    {
         match self {
             Triage::Okay(v) => f(v),
             Triage::Warn(v, w) => match f(v) {
-                Triage::Okay(u) | Triage::Warn(u, _) => Triage::Warn(u, w),
+                Triage::Okay(u) => Triage::Warn(u, w),
+                Triage::Warn(u, ww) => Triage::Warn(u, w.max(ww)),
                 Triage::Error(e) => Triage::Error(e),
             },
             Triage::Error(e) => Triage::Error(e),
@@ -92,40 +96,5 @@ impl<T> OptionTriage for Option<T> {
     #[inline(always)]
     fn triage<W, E>(self, err: E) -> Triage<Self::Value, W, E> {
         self.map_or(Triage::Error(err), Triage::Okay)
-    }
-}
-
-/// Map `Some` to `Triage::Warn` and `None` to the provided value.
-pub trait OptionWarn {
-    /// Type of warning.
-    type Warning;
-    /// Map `Some` to `Triage::Warn` and `None` to `Triage::Okay`.
-    fn warn_or<T, E>(self, value: T) -> Triage<T, Self::Warning, E>;
-    /// Map `Some` to `Triage::Warn` and `None` to the provided value.
-    fn warn_and_then<T, E>(self, value: Triage<T, Self::Warning, E>)
-        -> Triage<T, Self::Warning, E>;
-}
-
-impl<W> OptionWarn for Option<W> {
-    type Warning = W;
-    #[inline(always)]
-    fn warn_or<T, E>(self, value: T) -> Triage<T, Self::Warning, E> {
-        match self {
-            None => Triage::Okay(value),
-            Some(w) => Triage::Warn(value, w),
-        }
-    }
-    #[inline(always)]
-    fn warn_and_then<T, E>(
-        self,
-        value: Triage<T, Self::Warning, E>,
-    ) -> Triage<T, Self::Warning, E> {
-        match self {
-            None => value,
-            Some(w) => match value {
-                Triage::Okay(v) | Triage::Warn(v, _) => Triage::Warn(v, w),
-                Triage::Error(e) => Triage::Error(e),
-            },
-        }
     }
 }

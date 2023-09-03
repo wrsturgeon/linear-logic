@@ -39,6 +39,13 @@ impl core::fmt::Display for Name {
     }
 }
 
+impl From<Name> for char {
+    #[inline(always)]
+    fn from(value: Name) -> Self {
+        value.0
+    }
+}
+
 #[cfg(feature = "quickcheck")]
 impl quickcheck::Arbitrary for Name {
     #[inline]

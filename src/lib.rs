@@ -89,7 +89,7 @@ mod triage;
 
 pub use {
     parse::parse,
-    triage::{OptionTriage, OptionWarn, Severity, Triage},
+    triage::{OptionTriage, Severity, Triage},
 };
 
 #[cfg(test)]

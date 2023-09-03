@@ -10,12 +10,12 @@ mod infix;
 mod name;
 mod nonbinary;
 mod prefix;
-mod tree;
+pub(crate) mod tree;
 
 pub(crate) use nonbinary::Nonbinary;
 pub use {
     infix::{Associativity, Infix, PAR},
     name::Name,
     prefix::Prefix,
-    tree::{SyntaxAware, Tree},
+    tree::Tree,
 };

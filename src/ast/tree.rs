@@ -6,30 +6,57 @@
 
 //! Linear-logic expressions as heap trees.
 
-use crate::ast::{Infix, Name, Prefix};
+use crate::{
+    ast::{Infix, Name, Nonbinary, Prefix},
+    parse, Triage,
+};
 
 /// Either parenthesized or not.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum SyntaxAware {
+pub(crate) enum SyntaxAware {
     /// Raw name: e.g. `A`.
     Value(Name),
     /// Unary operation: e.g. `?A`.
-    Unary(Prefix, Box<Tree>),
+    Unary(Prefix, Box<Nonbinary>),
     /// Binary operation: e.g. `A * B`.
-    Binary(Box<Tree>, Infix, Box<SyntaxAware>),
+    Binary(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
     /// Parenthesized tree.
-    Parenthesized(Box<Tree>),
+    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
 }
 
-impl From<SyntaxAware> for Tree {
+impl SyntaxAware {
+    /// Convert to a tree by removing parentheses and warn if parentheses were unnecessary.
     #[inline]
-    fn from(value: SyntaxAware) -> Self {
-        match value {
-            SyntaxAware::Value(v) => Tree::Value(v),
-            SyntaxAware::Unary(op, arg) => Tree::Unary(op, arg),
-            SyntaxAware::Binary(lhs, op, rhs) => Tree::Binary(lhs, op, Box::new((*rhs).into())),
-            SyntaxAware::Parenthesized(tree) => *tree,
+    #[must_use]
+    #[allow(clippy::only_used_in_recursion, clippy::similar_names)]
+    pub(crate) fn into_tree(
+        self,
+        lnbr: Option<Infix>,
+        rnbr: Option<Infix>,
+    ) -> Triage<Tree, parse::Warning, parse::Error> {
+        #[allow(clippy::wildcard_enum_match_arm)] // FIXME: remove
+        match self {
+            SyntaxAware::Value(v) => Triage::Okay(Tree::Value(v)),
+            SyntaxAware::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
+            SyntaxAware::Binary(lhs, op, rhs) => lhs.into_tree(lnbr, Some(op)).and_then(|tl| {
+                rhs.into_tree(Some(op), rnbr)
+                    .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+            }),
+            SyntaxAware::Parenthesized(lhs, op, rhs) => if lnbr
+                .map_or(false, |other| op.weaker_to_the_right_of(other))
+                || rnbr.map_or(false, |other| op.weaker_to_the_left_of(other))
+            {
+                Triage::Okay(())
+            } else {
+                Triage::Warn((), parse::Warning::UnnecessaryParens)
+            }
+            .and_then(|()| {
+                lhs.into_tree(None, None).and_then(|tl| {
+                    rhs.into_tree(None, None)
+                        .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+                })
+            }),
         }
     }
 }
@@ -46,14 +73,104 @@ pub enum Tree {
     Binary(Box<Tree>, Infix, Box<Tree>),
 }
 
+impl Tree {
+    /// Get the topmost binary operation.
+    #[inline]
+    #[must_use]
+    pub const fn top_bin_op(&self) -> Option<Infix> {
+        match self {
+            &Tree::Value(_) => None,
+            &Tree::Unary(_, ref arg) => arg.top_bin_op(),
+            &Tree::Binary(_, op, _) => Some(op),
+        }
+    }
+    /// Display with knowledge of our neighbors to inform parenthesization.
+    #[inline]
+    #[must_use]
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::only_used_in_recursion,
+        clippy::similar_names
+    )]
+    pub fn display(&self, lnbr: Option<Infix>, rnbr: Option<Infix>) -> (String, Option<Infix>) {
+        match self {
+            &Tree::Value(name) => (core::iter::once(char::from(name)).collect(), None),
+            &Tree::Unary(op, ref arg) => {
+                if let &Tree::Binary(_, _, _) = arg.as_ref() {
+                    (
+                        op.to_string() + "(" + &arg.display(None, None).0 + ")",
+                        None,
+                    )
+                } else {
+                    (op.to_string() + &arg.display(None, None).0, None)
+                }
+            }
+            &Tree::Binary(ref lhs, op, ref rhs) => {
+                // We should never surround ourselves in parentheses, only our left- and right-children.
+                // This way the top level is never parenthesized pointlessly (and this probably makes sense recursively).
+                let mut s = String::new();
+                {
+                    let (sl, ol) = lhs.display(lnbr, Some(op));
+                    let parenthesize = ol.map_or(false, |other| other.weaker_to_the_left_of(op));
+                    if parenthesize {
+                        s.push('(');
+                    }
+                    s.push_str(&sl);
+                    if parenthesize {
+                        s.push(')');
+                    }
+                }
+                s.push(' ');
+                s.push_str(&op.to_string());
+                s.push(' ');
+                {
+                    let (sr, or) = rhs.display(Some(op), rnbr);
+                    let parenthesize = or.map_or(false, |other| other.weaker_to_the_right_of(op));
+                    if parenthesize {
+                        s.push('(');
+                    }
+                    s.push_str(&sr);
+                    if parenthesize {
+                        s.push(')');
+                    }
+                }
+                (s, Some(op))
+            }
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(test)]
+    pub fn exhaustive_up_to_depth(depth: usize) -> Vec<Self> {
+        depth.checked_sub(1).map_or(Vec::new(), |rec| {
+            #[allow(unsafe_code)]
+            // SAFETY:
+            // Duh.
+            let mut v = vec![Self::Value(unsafe {
+                Name::from_char('A').strict().unwrap_unchecked()
+            })];
+            for t in Self::exhaustive_up_to_depth(rec) {
+                v.push(Self::Unary(Prefix::Bang, Box::new(t)));
+            }
+            for lhs in Self::exhaustive_up_to_depth(rec) {
+                for rhs in Self::exhaustive_up_to_depth(rec) {
+                    v.push(Self::Binary(
+                        Box::new(lhs.clone()),
+                        Infix::Times,
+                        Box::new(rhs),
+                    ));
+                }
+            }
+            v
+        })
+    }
+}
+
 impl core::fmt::Display for Tree {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            &Tree::Value(ref name) => write!(f, "{name}"),
-            &Tree::Unary(ref op, ref tree) => write!(f, "{op}{tree}"),
-            &Tree::Binary(ref lhs, ref op, ref rhs) => write!(f, "({lhs} {op} {rhs})"),
-        }
+        write!(f, "{}", self.display(None, None).0)
     }
 }
 
