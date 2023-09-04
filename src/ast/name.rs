@@ -8,7 +8,7 @@
 
 use crate::{
     parse::{Error, Warning},
-    Triage,
+    Spanned, Triage,
 };
 
 /// Name of a variable.
@@ -23,11 +23,14 @@ impl Name {
     /// When a would-be name would be invalid.
     #[inline]
     #[must_use]
-    pub fn from_char(c: char) -> Triage<Self, Warning, Error> {
+    pub fn from_char(c: char, i: usize) -> Triage<Self, Warning, Error> {
         if c.is_alphabetic() {
             Triage::Okay(Self(c))
         } else {
-            Triage::Error(Error::InvalidName(c))
+            Triage::Error(Spanned {
+                msg: Error::InvalidName(c),
+                index: i,
+            })
         }
     }
 }

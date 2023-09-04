@@ -6,6 +6,7 @@
 
 #![allow(
     clippy::missing_const_for_fn,
+    clippy::panic,
     clippy::print_stdout,
     clippy::unwrap_used,
     clippy::use_debug,
@@ -14,7 +15,7 @@
 
 use crate::{
     ast::{self, Name},
-    parse, Triage,
+    parse, Spanned, Triage,
 };
 
 mod unit {
@@ -24,7 +25,10 @@ mod unit {
     fn empty() {
         assert_eq!(
             parse(core::iter::empty::<char>()),
-            Triage::Error(parse::Error::EmptyExpression),
+            Triage::Error(Spanned {
+                msg: parse::Error::EmptyExpression,
+                index: usize::MAX,
+            }),
         );
     }
 
@@ -32,7 +36,21 @@ mod unit {
     fn empty_parens() {
         assert_eq!(
             parse("()".chars()),
-            Triage::Error(parse::Error::EmptyExpression),
+            Triage::Error(Spanned {
+                msg: parse::Error::EmptyExpression,
+                index: 1,
+            }),
+        );
+    }
+
+    #[test]
+    fn just_rparen() {
+        assert_eq!(
+            parse(")".chars()),
+            Triage::Error(Spanned {
+                msg: parse::Error::MissingLeftParen,
+                index: 0,
+            })
         );
     }
 
@@ -40,7 +58,7 @@ mod unit {
     fn name() {
         assert_eq!(
             parse("A".chars()),
-            Triage::Okay(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+            Triage::Okay(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
         );
     }
 
@@ -50,7 +68,7 @@ mod unit {
             parse("!A".chars()),
             Triage::Okay(ast::Tree::Unary(
                 ast::Prefix::Bang,
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
             )),
         );
     }
@@ -60,9 +78,9 @@ mod unit {
         assert_eq!(
             parse("A * B".chars()),
             Triage::Okay(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
             )),
         );
     }
@@ -72,12 +90,12 @@ mod unit {
         assert_eq!(
             parse("A + B * C".chars()),
             Triage::Okay(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                 ast::Infix::Plus,
                 Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
                 )),
             )),
         );
@@ -90,9 +108,12 @@ mod unit {
             Triage::Warn(
                 ast::Tree::Unary(
                     ast::Prefix::Bang,
-                    Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap()))
+                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()))
                 ),
-                parse::Warning::UnnecessarySpace,
+                Spanned {
+                    msg: parse::Warning::UnnecessarySpace,
+                    index: 1,
+                },
             ),
         );
     }
@@ -103,35 +124,68 @@ mod unit {
             parse("A + (B * C)".chars()),
             Triage::Warn(
                 ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                     ast::Infix::Plus,
                     Box::new(ast::Tree::Binary(
-                        Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                        Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                         ast::Infix::Times,
-                        Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                        Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
                     )),
                 ),
-                parse::Warning::UnnecessaryParens,
+                Spanned {
+                    msg: parse::Warning::UnnecessaryParens,
+                    index: 4,
+                },
             ),
         );
     }
 
     #[test]
-    #[allow(unused_results)]
     fn double_parens() {
         assert_eq!(
             parse("((A + B)) * C".chars()),
             Triage::Warn(
                 ast::Tree::Binary(
                     Box::new(ast::Tree::Binary(
-                        Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                        Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                         ast::Infix::Plus,
-                        Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                        Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                     )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
                 ),
-                parse::Warning::UnnecessaryParens,
+                Spanned {
+                    msg: parse::Warning::UnnecessaryParens,
+                    index: 1,
+                },
+            ),
+        );
+    }
+
+    #[test]
+    fn multiple_leading_spaces() {
+        assert_eq!(
+            parse("   A".chars()),
+            Triage::Warn(
+                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                Spanned {
+                    msg: parse::Warning::LeadingSpace,
+                    index: 0,
+                },
+            ),
+        );
+    }
+
+    #[test]
+    fn multiple_trailing_spaces() {
+        assert_eq!(
+            parse("A   ".chars()),
+            Triage::Warn(
+                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                Spanned {
+                    msg: parse::Warning::TrailingSpace,
+                    index: usize::MAX,
+                },
             ),
         );
     }
@@ -168,9 +222,9 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_1() {
         let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "A * B");
@@ -183,10 +237,10 @@ mod reduced {
         let tree = ast::Tree::Binary(
             Box::new(ast::Tree::Unary(
                 ast::Prefix::Bang,
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
             )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "!A * B");
@@ -199,9 +253,9 @@ mod reduced {
         let tree = ast::Tree::Unary(
             ast::Prefix::Bang,
             Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
             )),
         );
         let printed = format!("{tree}");
@@ -214,12 +268,12 @@ mod reduced {
     fn roundtrip_expr_bytes_4() {
         let tree = ast::Tree::Binary(
             Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                 ast::Infix::Plus,
-                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
             )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "(A + B) * C");
@@ -230,12 +284,12 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_5() {
         let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
             ast::Infix::Times,
             Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
             )),
         );
         let printed = format!("{tree}");
@@ -249,12 +303,12 @@ mod reduced {
         let tree = ast::Tree::Unary(
             ast::Prefix::Bang,
             Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                 ast::Infix::Times,
                 Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
                 )),
             )),
         );
@@ -267,15 +321,15 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_7() {
         let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
             ast::Infix::Plus,
             Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                 ast::Infix::With,
                 Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('C').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
                     ast::Infix::Par,
-                    Box::new(ast::Tree::Value(Name::from_char('D').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('D', 0).strict().unwrap())),
                 )),
             )),
         );
@@ -291,8 +345,11 @@ mod reduced {
         assert_eq!(
             parse("A ".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A').strict().unwrap()),
-                parse::Warning::TrailingSpace,
+                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                Spanned {
+                    msg: parse::Warning::TrailingSpace,
+                    index: usize::MAX,
+                },
             ),
         );
     }
@@ -304,11 +361,14 @@ mod reduced {
             parse("A* B".chars()),
             Triage::Warn(
                 ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                 ),
-                parse::Warning::MissingInfixSpace,
+                Spanned {
+                    msg: parse::Warning::MissingInfixSpace,
+                    index: 1,
+                },
             ),
         );
     }
@@ -320,11 +380,14 @@ mod reduced {
             parse("A *B".chars()),
             Triage::Warn(
                 ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('B').strict().unwrap())),
+                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
                 ),
-                parse::Warning::MissingInfixSpace,
+                Spanned {
+                    msg: parse::Warning::MissingInfixSpace,
+                    index: 3,
+                },
             ),
         );
     }
@@ -335,14 +398,20 @@ mod reduced {
         assert_eq!(
             parse("(A)".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A').strict().unwrap()),
-                parse::Warning::UnnecessaryParens,
+                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                Spanned {
+                    msg: parse::Warning::UnnecessaryParens,
+                    index: 0, // TODO: arguable, could be 1
+                },
             ),
         );
     }
 }
 
+#[cfg(feature = "quickcheck")] // not actually necessary but kindred spirits: please don't run miri on this
 mod systematic {
+    use crate::Spanned;
+
     use super::*;
 
     #[repr(u8)]
@@ -386,49 +455,78 @@ mod systematic {
     }
 
     #[test]
+    #[allow(unreachable_code, unused_mut, unused_variables)] // FIXME
     fn exhaustive_and_valid_iff_both_unique_and_shortest() {
+        const MAX_LEN: usize = 11;
         let mut v = vec![0];
-        let mut seen = std::collections::HashSet::new();
-        let mut exhaustive = ast::Tree::exhaustive_up_to_depth(3);
-        {
-            let len = exhaustive.len();
-            exhaustive.dedup();
-            assert_eq!(len, exhaustive.len()); // no-op
-        }
-        exhaustive.sort();
-        let max_len = exhaustive
-            .iter()
-            .fold(0, |acc, t| acc.max(format!("{t}").len()));
-        let mut exhausted: Vec<_> = exhaustive.iter().map(|_| false).collect();
-        assert_eq!(exhaustive.len(), exhausted.len());
+        let mut exhaustive: std::collections::HashMap<ast::Tree, bool> =
+            ast::Tree::exhaustive_to_length(MAX_LEN, false)
+                .into_iter()
+                .filter_map(|t| (format!("{t}").len() <= MAX_LEN).then_some((t, false)))
+                .collect();
+        assert_eq!(
+            exhaustive.values().copied().collect::<Vec<_>>(),
+            core::iter::repeat(false)
+                .take(exhaustive.len())
+                .collect::<Vec<_>>(),
+        );
+        println!("{:#?}", {
+            let mut keys = exhaustive
+                .keys()
+                .map(|t| format!("{t}"))
+                .collect::<Vec<_>>();
+            keys.sort();
+            keys
+        });
         'check: loop {
             let chars = v.iter().map(|b| char::from(Character::from(*b)));
             #[allow(clippy::wildcard_enum_match_arm)]
             match parse(chars.clone()) {
                 Triage::Okay(parsed) => {
-                    #[allow(unsafe_code)]
-                    if let Ok(i) = exhaustive.binary_search(&parsed) {
-                        // SAFETY:
-                        // Same length, and the searched vector is sorted.
-                        *unsafe { exhausted.get_unchecked_mut(i) } = true;
-                    }
-                    assert!(
-                        seen.insert(parsed),
-                        "Fully valid string \"{}\" parsed \
-                        as an expression we've already seen",
-                        chars.collect::<String>(),
+                    #[allow(clippy::from_iter_instead_of_collect)]
+                    exhaustive.get_mut(&parsed).map_or_else(
+                        || {
+                            panic!(
+                                "Produced a value that should have needed \
+                                more characters: \"{parsed}\" i.e. {parsed:?}",
+                            );
+                        },
+                        |b| {
+                            assert!(
+                                !*b,
+                                "Fully valid string \"{}\" parsed \
+                                as an expression we've already seen",
+                                String::from_iter(chars),
+                            );
+                            *b = true;
+                        },
                     );
                 }
-                Triage::Warn(parsed, parse::Warning::UnnecessaryParens) => {
+                Triage::Warn(
+                    parsed,
+                    Spanned {
+                        msg: parse::Warning::UnnecessaryParens,
+                        index,
+                    },
+                ) => {
                     // must not be the shortest way to write it,
                     // or else the parens would have been necessary
-                    assert!(
-                        seen.contains(&parsed),
-                        "Parentheses flagged as unnecessary in \"{}\", \
-                        but there's no shorter way to write `{parsed:?}`",
-                        v.iter()
-                            .map(|b| char::from(Character::from(*b)))
-                            .collect::<String>(),
+                    #[allow(clippy::from_iter_instead_of_collect)]
+                    exhaustive.get(&parsed).map_or_else(
+                        || {
+                            panic!(
+                                "Produced a value that should have needed \
+                                more characters: \"{parsed}\" i.e. {parsed:?}",
+                            )
+                        },
+                        |seen| {
+                            assert!(
+                                *seen,
+                                "Parentheses flagged as unnecessary in \"{}\" at character #{index}, \
+                                but there's no shorter way to write `{parsed:?}`",
+                                String::from_iter(v.iter().map(|b| char::from(Character::from(*b)))),
+                            );
+                        },
                     );
                 }
                 _ => {}
@@ -446,20 +544,12 @@ mod systematic {
                     i = decr;
                     continue 'carry;
                 }
-                if v.len() < max_len {
+                if v.len() < MAX_LEN {
                     v.push(0);
                     continue 'check;
                 }
-                for j in 0..exhaustive.len() {
-                    #[allow(unsafe_code)]
-                    // SAFETY: Range above. Also asserted to be the same length earlier.
-                    unsafe {
-                        assert!(
-                            exhausted.get_unchecked(j),
-                            "Couldn't produce \"{}\" i.e. `{0:?}`",
-                            exhaustive.get_unchecked(j)
-                        );
-                    }
+                for (tree, produced) in exhaustive {
+                    assert!(produced, "Couldn't produce \"{tree}\" i.e. `{tree:?}`",);
                 }
                 return;
             }

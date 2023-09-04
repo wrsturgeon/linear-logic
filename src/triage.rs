@@ -6,30 +6,69 @@
 
 //! Result, error, _**or** warning_.
 
+use core::fmt::Display;
+
 /// Result, error, _**or** warning_.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Triage<T, W, E> {
+pub enum Triage<T, W: Ord + Display, E: Display> {
     /// Successful result.
     Okay(T),
     /// Result with a warning.
-    Warn(T, W),
+    Warn(T, Spanned<W>),
     /// Error and no result.
-    Error(E),
+    Error(Spanned<E>),
+}
+
+/// Error with blame on a span of input.
+#[allow(clippy::exhaustive_structs)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Spanned<M: Display> {
+    /// Error/warning message.
+    pub msg: M,
+    /// Index of the first character that caused this error.
+    pub index: usize,
+}
+
+impl<M: PartialOrd + Display> PartialOrd for Spanned<M> {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        match self.msg.partial_cmp(&other.msg) {
+            None | Some(core::cmp::Ordering::Equal) => Some(self.index.cmp(&other.index).reverse()),
+            diff @ Some(core::cmp::Ordering::Less | core::cmp::Ordering::Greater) => diff,
+        }
+    }
+}
+
+impl<M: Ord + Display> Ord for Spanned<M> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        match self.msg.cmp(&other.msg) {
+            core::cmp::Ordering::Equal => self.index.cmp(&other.index).reverse(),
+            diff @ (core::cmp::Ordering::Less | core::cmp::Ordering::Greater) => diff,
+        }
+    }
+}
+
+impl<M: Display> Display for Spanned<M> {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Error (\"{}\") at character #{}", self.msg, self.index)
+    }
 }
 
 /// Either a warning or an error.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Severity<W, E> {
+pub enum Severity<W: Ord + Display, E: Display> {
     /// Not-necessarily-fatal warning.
-    Warn(W),
+    Warn(Spanned<W>),
     /// Fatal error.
-    Error(E),
+    Error(Spanned<E>),
 }
 
 #[allow(clippy::missing_const_for_fn)] // destructor issue
-impl<T, W, E> Triage<T, W, E> {
+impl<T, W: Ord + Display, E: Display> Triage<T, W, E> {
     /// Turn warningss into errors and return a `Result`.
     /// # Errors
     /// Both `Error` and `Warning`.
@@ -46,7 +85,7 @@ impl<T, W, E> Triage<T, W, E> {
     /// # Errors
     /// Only `Error`, not `Warning`.
     #[inline]
-    pub fn permissive(self) -> Result<T, E> {
+    pub fn permissive(self) -> Result<T, Spanned<E>> {
         match self {
             Triage::Okay(v) | Triage::Warn(v, _) => Ok(v),
             Triage::Error(e) => Err(e),
@@ -66,10 +105,7 @@ impl<T, W, E> Triage<T, W, E> {
     /// Apply a function to a successful or warned value.
     /// monadic af <3
     #[inline]
-    pub fn and_then<U, F: FnOnce(T) -> Triage<U, W, E>>(self, f: F) -> Triage<U, W, E>
-    where
-        W: Ord,
-    {
+    pub fn and_then<U, F: FnOnce(T) -> Triage<U, W, E>>(self, f: F) -> Triage<U, W, E> {
         match self {
             Triage::Okay(v) => f(v),
             Triage::Warn(v, w) => match f(v) {
@@ -82,19 +118,13 @@ impl<T, W, E> Triage<T, W, E> {
     }
 }
 
-/// Map `Some` to `Triage::Okay` and `None` to `Triage::Error`.
-#[allow(clippy::module_name_repetitions)]
-pub trait OptionTriage {
-    /// Output of a successful call.
-    type Value;
-    /// If ended, `Triage::Error(parse::Error::End)`; otherwise, wrap in `Triage::Okay`.
-    fn triage<W, E>(self, err: E) -> Triage<Self::Value, W, E>;
-}
-
-impl<T> OptionTriage for Option<T> {
-    type Value = T;
-    #[inline(always)]
-    fn triage<W, E>(self, err: E) -> Triage<Self::Value, W, E> {
-        self.map_or(Triage::Error(err), Triage::Okay)
+impl<T: Display, W: Ord + Display, E: Display> Display for Triage<T, W, E> {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            &Self::Okay(ref v) => write!(f, "{v}"),
+            &Self::Warn(ref v, ref w) => write!(f, "WARNING: {w}. Try this: {v}"),
+            &Self::Error(ref e) => write!(f, "{e}"),
+        }
     }
 }

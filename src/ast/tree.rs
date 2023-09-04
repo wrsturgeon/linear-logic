@@ -8,7 +8,7 @@
 
 use crate::{
     ast::{Infix, Name, Nonbinary, Prefix},
-    parse, Triage,
+    parse, Spanned, Triage,
 };
 
 /// Either parenthesized or not.
@@ -22,7 +22,7 @@ pub(crate) enum SyntaxAware {
     /// Binary operation: e.g. `A * B`.
     Binary(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
     /// Parenthesized tree.
-    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
+    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>, usize),
 }
 
 impl SyntaxAware {
@@ -42,13 +42,19 @@ impl SyntaxAware {
                 rhs.into_tree(Some(op), rnbr)
                     .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
             }),
-            SyntaxAware::Parenthesized(lhs, op, rhs) => if lnbr
+            SyntaxAware::Parenthesized(lhs, op, rhs, index) => if lnbr
                 .map_or(false, |other| op.weaker_to_the_right_of(other))
                 || rnbr.map_or(false, |other| op.weaker_to_the_left_of(other))
             {
                 Triage::Okay(())
             } else {
-                Triage::Warn((), parse::Warning::UnnecessaryParens)
+                Triage::Warn(
+                    (),
+                    Spanned {
+                        msg: parse::Warning::UnnecessaryParens,
+                        index,
+                    },
+                )
             }
             .and_then(|()| {
                 lhs.into_tree(None, Some(op)).and_then(|tl| {
@@ -141,28 +147,65 @@ impl Tree {
     #[inline]
     #[must_use]
     #[cfg(test)]
-    pub fn exhaustive_up_to_depth(depth: usize) -> Vec<Self> {
-        depth.checked_sub(1).map_or(Vec::new(), |rec| {
-            #[allow(unsafe_code)]
-            // SAFETY:
-            // Duh.
-            let mut v = vec![Self::Value(unsafe {
-                Name::from_char('A').strict().unwrap_unchecked()
-            })];
-            for t in Self::exhaustive_up_to_depth(rec) {
-                v.push(Self::Unary(Prefix::Bang, Box::new(t)));
-            }
-            for lhs in Self::exhaustive_up_to_depth(rec) {
-                for rhs in Self::exhaustive_up_to_depth(rec) {
-                    v.push(Self::Binary(
-                        Box::new(lhs.clone()),
-                        Infix::Times,
-                        Box::new(rhs),
-                    ));
-                }
-            }
-            v
+    pub fn exhaustive_to_depth(depth: usize) -> Vec<Tree> {
+        depth.checked_sub(1).map_or(vec![], |next_depth| {
+            let rec = Self::exhaustive_to_depth(next_depth).into_iter();
+            core::iter::once(Self::Value(
+                #[allow(unsafe_code)]
+                // SAFETY:
+                // Duh.
+                unsafe {
+                    Name::from_char('A', 0).strict().unwrap_unchecked()
+                },
+            ))
+            .chain(rec.clone().map(|t| Self::Unary(Prefix::Bang, Box::new(t))))
+            .chain(rec.clone().flat_map(move |lhs| {
+                rec.clone().map(move |rhs| {
+                    Self::Binary(Box::new(lhs.clone()), Infix::Times, Box::new(rhs))
+                })
+            }))
+            .collect()
         })
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(test)]
+    pub fn exhaustive_to_length(len: usize, paren: bool) -> Vec<Tree> {
+        if len == 0 {
+            return vec![];
+        }
+        #[allow(unsafe_code)]
+        // SAFETY:
+        // Duh.
+        let mut v = vec![Self::Value(unsafe {
+            Name::from_char('A', 0).strict().unwrap_unchecked()
+        })];
+        for t in Self::exhaustive_to_length(
+            match len.saturating_sub(1) {
+                0 => return v,
+                i => i,
+            },
+            true,
+        ) {
+            v.push(Self::Unary(Prefix::Bang, Box::new(t)));
+        }
+        let post_bin = match len.saturating_sub(if paren { 5 } else { 3 }) {
+            0 => return v,
+            i => i,
+        };
+        for lhs in Self::exhaustive_to_length(post_bin, false) {
+            for rhs in
+                Self::exhaustive_to_length(post_bin.saturating_sub(format!("{lhs}").len()), false)
+            {
+                v.push(Self::Binary(
+                    Box::new(lhs.clone()),
+                    Infix::Times,
+                    Box::new(rhs),
+                ));
+            }
+        }
+        v
     }
 }
 

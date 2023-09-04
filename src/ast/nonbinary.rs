@@ -19,7 +19,7 @@ pub(crate) enum Nonbinary {
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Nonbinary>),
     /// Binary operation: e.g. `A * B`.
-    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>),
+    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>, usize),
 }
 
 impl Nonbinary {
@@ -31,7 +31,7 @@ impl Nonbinary {
         match self {
             Nonbinary::Value(v) => Triage::Okay(Tree::Value(v)),
             Nonbinary::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
-            Nonbinary::Parenthesized(lhs, op, rhs) => {
+            Nonbinary::Parenthesized(lhs, op, rhs, _) => {
                 lhs.into_tree(None, Some(op)).and_then(|tl| {
                     rhs.into_tree(Some(op), None)
                         .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
@@ -47,7 +47,9 @@ impl From<Nonbinary> for SyntaxAware {
         match value {
             Nonbinary::Value(c) => Self::Value(c),
             Nonbinary::Unary(op, arg) => Self::Unary(op, arg),
-            Nonbinary::Parenthesized(lhs, op, rhs) => Self::Parenthesized(lhs, op, rhs),
+            Nonbinary::Parenthesized(lhs, op, rhs, index) => {
+                Self::Parenthesized(lhs, op, rhs, index)
+            }
         }
     }
 }
