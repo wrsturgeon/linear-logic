@@ -4,10 +4,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! Linear-logic expressions as heap trees.
+//! Unsimplified linear-logic expressions as heap trees.
 
 use crate::{
-    ast::{Infix, Name, Nonbinary, Prefix},
+    ast::{
+        Funky, FunkyInfix, Name, Nonbinary, Simplified, SimplifiedInfix, SimplifiedPrefix,
+        UnsimplifiedInfix as Infix, UnsimplifiedPrefix as Prefix,
+    },
     parse, Spanned, Triage,
 };
 
@@ -70,7 +73,7 @@ impl SyntaxAware {
     }
 }
 
-/// Linear-logic expressions as heap trees.
+/// Unsimplified linear-logic expressions as heap trees.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Unsimplified {
@@ -148,28 +151,166 @@ impl Unsimplified {
         }
     }
 
+    /// Compute the dual for this expression without non-atomic duals or lollipops.
     #[inline]
     #[must_use]
-    #[cfg(test)]
-    pub fn exhaustive_to_depth(depth: usize) -> Vec<Unsimplified> {
-        depth.checked_sub(1).map_or(vec![], |next_depth| {
-            let rec = Self::exhaustive_to_depth(next_depth).into_iter();
-            core::iter::once(Self::Value(
-                #[allow(unsafe_code)]
-                // SAFETY:
-                // Duh.
-                unsafe {
-                    Name::from_char('A', 0).strict().unwrap_unchecked()
-                },
-            ))
-            .chain(rec.clone().map(|t| Self::Unary(Prefix::Bang, Box::new(t))))
-            .chain(rec.clone().flat_map(move |lhs| {
-                rec.clone().map(move |rhs| {
-                    Self::Binary(Box::new(lhs.clone()), Infix::Times, Box::new(rhs))
-                })
-            }))
-            .collect()
-        })
+    fn simplified_dual(self) -> Simplified {
+        match self {
+            Self::Value(name) => Simplified::Dual(name),
+            Self::Unary(op, arg) => match op {
+                Prefix::Dual => arg.simplify(),
+                Prefix::Bang => {
+                    Simplified::Unary(SimplifiedPrefix::Quest, Box::new(arg.simplified_dual()))
+                }
+                Prefix::Quest => {
+                    Simplified::Unary(SimplifiedPrefix::Bang, Box::new(arg.simplified_dual()))
+                }
+            },
+            Self::Binary(lhs, op, rhs) => match op {
+                Infix::Lollipop => {
+                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                        .simplified_dual()
+                }
+                Infix::Plus => Simplified::Binary(
+                    Box::new(lhs.simplified_dual()),
+                    SimplifiedInfix::With,
+                    Box::new(rhs.simplified_dual()),
+                ),
+                Infix::With => Simplified::Binary(
+                    Box::new(lhs.simplified_dual()),
+                    SimplifiedInfix::Plus,
+                    Box::new(rhs.simplified_dual()),
+                ),
+                Infix::Times => Simplified::Binary(
+                    Box::new(lhs.simplified_dual()),
+                    SimplifiedInfix::Par,
+                    Box::new(rhs.simplified_dual()),
+                ),
+                Infix::Par => Simplified::Binary(
+                    Box::new(lhs.simplified_dual()),
+                    SimplifiedInfix::Times,
+                    Box::new(rhs.simplified_dual()),
+                ),
+            },
+        }
+    }
+
+    /// Simplify a linear-logic expression to remove all non-atomic duals and lollipops.
+    #[inline]
+    #[must_use]
+    pub fn simplify(self) -> Simplified {
+        match self {
+            Self::Value(name) => Simplified::Value(name),
+            Self::Unary(op, arg) => match op {
+                Prefix::Bang => Simplified::Unary(SimplifiedPrefix::Bang, Box::new(arg.simplify())),
+                Prefix::Quest => {
+                    Simplified::Unary(SimplifiedPrefix::Quest, Box::new(arg.simplify()))
+                }
+                Prefix::Dual => arg.simplified_dual(),
+            },
+            Self::Binary(lhs, op, rhs) => match op {
+                Infix::Lollipop => {
+                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                        .simplify()
+                }
+                Infix::Plus => Simplified::Binary(
+                    Box::new(lhs.simplify()),
+                    SimplifiedInfix::Plus,
+                    Box::new(rhs.simplify()),
+                ),
+                Infix::With => Simplified::Binary(
+                    Box::new(lhs.simplify()),
+                    SimplifiedInfix::With,
+                    Box::new(rhs.simplify()),
+                ),
+                Infix::Times => Simplified::Binary(
+                    Box::new(lhs.simplify()),
+                    SimplifiedInfix::Times,
+                    Box::new(rhs.simplify()),
+                ),
+                Infix::Par => Simplified::Binary(
+                    Box::new(lhs.simplify()),
+                    SimplifiedInfix::Par,
+                    Box::new(rhs.simplify()),
+                ),
+            },
+        }
+    }
+
+    /// Compute the dual for this expression without non-atomic duals or lollipops.
+    #[inline]
+    #[must_use]
+    fn funky_dual(self) -> Funky {
+        match self {
+            Self::Value(name) => Funky::Dual(name),
+            Self::Unary(op, arg) => match op {
+                Prefix::Dual => arg.funk(),
+                Prefix::Bang => Funky::Unary(SimplifiedPrefix::Quest, Box::new(arg.funky_dual())),
+                Prefix::Quest => Funky::Unary(SimplifiedPrefix::Bang, Box::new(arg.funky_dual())),
+            },
+            Self::Binary(lhs, op, rhs) => match op {
+                Infix::Lollipop => {
+                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                        .funky_dual()
+                }
+                Infix::Plus => Funky::Binary(
+                    Box::new(lhs.funky_dual()),
+                    FunkyInfix::With,
+                    Box::new(rhs.funky_dual()),
+                ),
+                Infix::With => Funky::Binary(
+                    Box::new(lhs.funky_dual()),
+                    FunkyInfix::Plus,
+                    Box::new(rhs.funky_dual()),
+                ),
+                Infix::Times => Self::Binary(
+                    Box::new(Self::Unary(Prefix::Dual, lhs)),
+                    Infix::Par,
+                    Box::new(Self::Unary(Prefix::Dual, rhs)),
+                )
+                .funk(),
+                Infix::Par => Funky::Binary(
+                    Box::new(lhs.funky_dual()),
+                    FunkyInfix::Times,
+                    Box::new(rhs.funky_dual()),
+                ),
+            },
+        }
+    }
+
+    /// Simplify a linear-logic expression to remove all non-atomic duals and par operators.
+    #[inline]
+    #[must_use]
+    pub fn funk(self) -> Funky {
+        match self {
+            Self::Value(name) => Funky::Value(name),
+            Self::Unary(op, arg) => match op {
+                Prefix::Bang => Funky::Unary(SimplifiedPrefix::Bang, Box::new(arg.funk())),
+                Prefix::Quest => Funky::Unary(SimplifiedPrefix::Quest, Box::new(arg.funk())),
+                Prefix::Dual => arg.funky_dual(),
+            },
+            Self::Binary(lhs, op, rhs) => match op {
+                Infix::Lollipop => {
+                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs))).funk()
+                }
+                Infix::Plus => {
+                    Funky::Binary(Box::new(lhs.funk()), FunkyInfix::Plus, Box::new(rhs.funk()))
+                }
+                Infix::With => {
+                    Funky::Binary(Box::new(lhs.funk()), FunkyInfix::With, Box::new(rhs.funk()))
+                }
+                Infix::Times => Funky::Binary(
+                    Box::new(lhs.funk()),
+                    FunkyInfix::Times,
+                    Box::new(rhs.funk()),
+                ),
+                Infix::Par => Funky::Binary(
+                    Box::new(lhs.funk()),
+                    FunkyInfix::Lollipop,
+                    Box::new(rhs.funky_dual()),
+                ),
+            },
+        }
     }
 
     #[inline]

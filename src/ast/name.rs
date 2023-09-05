@@ -17,6 +17,8 @@ use crate::{
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Name(char);
 
+// TODO: add 0, 1, Bottom, Top
+
 impl Name {
     /// Screen for invalid names.
     /// # Errors

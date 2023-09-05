@@ -7,7 +7,10 @@
 //! Anything but a binary operation (e.g. not `A * B`).
 
 use crate::{
-    ast::{unsimplified::SyntaxAware, Infix, Name, Prefix, Unsimplified},
+    ast::{
+        unsimplified::SyntaxAware, Name, Unsimplified, UnsimplifiedInfix,
+        UnsimplifiedPrefix as Prefix,
+    },
     parse, Triage,
 };
 
@@ -19,7 +22,7 @@ pub(crate) enum Nonbinary {
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Nonbinary>),
     /// Binary operation: e.g. `A * B`.
-    Parenthesized(Box<SyntaxAware>, Infix, Box<SyntaxAware>, usize),
+    Parenthesized(Box<SyntaxAware>, UnsimplifiedInfix, Box<SyntaxAware>, usize),
 }
 
 impl Nonbinary {

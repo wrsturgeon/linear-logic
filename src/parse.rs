@@ -9,7 +9,10 @@
 // TODO: abolish `usize::MAX`
 
 use crate::{
-    ast::{unsimplified::SyntaxAware, Infix, Name, Nonbinary, Prefix, Unsimplified, PAR},
+    ast::{
+        unsimplified::SyntaxAware, Name, Nonbinary, Unsimplified, UnsimplifiedInfix as Infix,
+        UnsimplifiedPrefix as Prefix, PAR,
+    },
     Spanned, Triage,
 };
 use core::iter::Enumerate;

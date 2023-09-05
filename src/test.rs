@@ -69,7 +69,7 @@ mod unit {
         assert_eq!(
             parse("!A".chars()),
             Triage::Okay(ast::Unsimplified::Unary(
-                ast::Prefix::Bang,
+                ast::UnsimplifiedPrefix::Bang,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap()
                 )),
@@ -85,7 +85,7 @@ mod unit {
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap()
                 )),
-                ast::Infix::Times,
+                ast::UnsimplifiedInfix::Times,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('B', 0).strict().unwrap()
                 )),
@@ -101,12 +101,12 @@ mod unit {
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap()
                 )),
-                ast::Infix::Plus,
+                ast::UnsimplifiedInfix::Plus,
                 Box::new(ast::Unsimplified::Binary(
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('B', 0).strict().unwrap()
                     )),
-                    ast::Infix::Times,
+                    ast::UnsimplifiedInfix::Times,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('C', 0).strict().unwrap()
                     )),
@@ -121,7 +121,7 @@ mod unit {
             parse("! A".chars()),
             Triage::Warn(
                 ast::Unsimplified::Unary(
-                    ast::Prefix::Bang,
+                    ast::UnsimplifiedPrefix::Bang,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('A', 0).strict().unwrap()
                     ))
@@ -143,12 +143,12 @@ mod unit {
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('A', 0).strict().unwrap()
                     )),
-                    ast::Infix::Plus,
+                    ast::UnsimplifiedInfix::Plus,
                     Box::new(ast::Unsimplified::Binary(
                         Box::new(ast::Unsimplified::Value(
                             Name::from_char('B', 0).strict().unwrap()
                         )),
-                        ast::Infix::Times,
+                        ast::UnsimplifiedInfix::Times,
                         Box::new(ast::Unsimplified::Value(
                             Name::from_char('C', 0).strict().unwrap()
                         )),
@@ -172,12 +172,12 @@ mod unit {
                         Box::new(ast::Unsimplified::Value(
                             Name::from_char('A', 0).strict().unwrap()
                         )),
-                        ast::Infix::Plus,
+                        ast::UnsimplifiedInfix::Plus,
                         Box::new(ast::Unsimplified::Value(
                             Name::from_char('B', 0).strict().unwrap()
                         )),
                     )),
-                    ast::Infix::Times,
+                    ast::UnsimplifiedInfix::Times,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('C', 0).strict().unwrap()
                     )),
@@ -241,6 +241,42 @@ mod prop {
             let printed = format!("{parsed}");
             quickcheck::TestResult::from_bool(printed == chars)
         }
+
+        fn roundtrip_simplified_unsimplified(orig: ast::Simplified) -> bool {
+            ast::Unsimplified::from(orig.clone()).simplify() == orig
+        }
+
+        fn roundtrip_simplified_funky(orig: ast::Simplified) -> bool {
+            orig.clone().funk().simplify() == orig
+        }
+
+        fn roundtrip_funky_simplified(orig: ast::Funky) -> bool {
+            orig.clone().simplify().funk() == orig
+        }
+
+        fn roundtrip_simplified_dual_dual(orig: ast::Simplified) -> bool {
+            orig.clone().dual().dual() == orig
+        }
+
+        fn roundtrip_funky_dual_dual(orig: ast::Funky) -> bool {
+            orig.clone().dual().dual() == orig
+        }
+
+        fn roundtrip_simplified_dual_funky_dual(orig: ast::Simplified) -> bool {
+            orig.clone().dual().funk().dual().simplify() == orig
+        }
+
+        fn roundtrip_funky_dual_simplified_dual(orig: ast::Funky) -> bool {
+            orig.clone().dual().simplify().dual().funk() == orig
+        }
+
+        fn all_roads_lead_to_simplified(orig: ast::Unsimplified) -> bool {
+            orig.clone().simplify() == orig.funk().simplify()
+        }
+
+        fn all_roads_lead_to_funk(orig: ast::Unsimplified) -> bool {
+            orig.clone().funk() == orig.simplify().funk()
+        }
     }
 }
 
@@ -253,7 +289,7 @@ mod reduced {
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('A', 0).strict().unwrap(),
             )),
-            ast::Infix::Times,
+            ast::UnsimplifiedInfix::Times,
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('B', 0).strict().unwrap(),
             )),
@@ -268,12 +304,12 @@ mod reduced {
     fn roundtrip_expr_bytes_2() {
         let tree = ast::Unsimplified::Binary(
             Box::new(ast::Unsimplified::Unary(
-                ast::Prefix::Bang,
+                ast::UnsimplifiedPrefix::Bang,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap(),
                 )),
             )),
-            ast::Infix::Times,
+            ast::UnsimplifiedInfix::Times,
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('B', 0).strict().unwrap(),
             )),
@@ -287,12 +323,12 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_3() {
         let tree = ast::Unsimplified::Unary(
-            ast::Prefix::Bang,
+            ast::UnsimplifiedPrefix::Bang,
             Box::new(ast::Unsimplified::Binary(
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap(),
                 )),
-                ast::Infix::Times,
+                ast::UnsimplifiedInfix::Times,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('B', 0).strict().unwrap(),
                 )),
@@ -311,12 +347,12 @@ mod reduced {
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap(),
                 )),
-                ast::Infix::Plus,
+                ast::UnsimplifiedInfix::Plus,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('B', 0).strict().unwrap(),
                 )),
             )),
-            ast::Infix::Times,
+            ast::UnsimplifiedInfix::Times,
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('C', 0).strict().unwrap(),
             )),
@@ -333,12 +369,12 @@ mod reduced {
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('A', 0).strict().unwrap(),
             )),
-            ast::Infix::Times,
+            ast::UnsimplifiedInfix::Times,
             Box::new(ast::Unsimplified::Binary(
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('B', 0).strict().unwrap(),
                 )),
-                ast::Infix::Times,
+                ast::UnsimplifiedInfix::Times,
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('C', 0).strict().unwrap(),
                 )),
@@ -353,17 +389,17 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_6() {
         let tree = ast::Unsimplified::Unary(
-            ast::Prefix::Bang,
+            ast::UnsimplifiedPrefix::Bang,
             Box::new(ast::Unsimplified::Binary(
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('A', 0).strict().unwrap(),
                 )),
-                ast::Infix::Times,
+                ast::UnsimplifiedInfix::Times,
                 Box::new(ast::Unsimplified::Binary(
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('B', 0).strict().unwrap(),
                     )),
-                    ast::Infix::Times,
+                    ast::UnsimplifiedInfix::Times,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('C', 0).strict().unwrap(),
                     )),
@@ -382,17 +418,17 @@ mod reduced {
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('A', 0).strict().unwrap(),
             )),
-            ast::Infix::Plus,
+            ast::UnsimplifiedInfix::Plus,
             Box::new(ast::Unsimplified::Binary(
                 Box::new(ast::Unsimplified::Value(
                     Name::from_char('B', 0).strict().unwrap(),
                 )),
-                ast::Infix::With,
+                ast::UnsimplifiedInfix::With,
                 Box::new(ast::Unsimplified::Binary(
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('C', 0).strict().unwrap(),
                     )),
-                    ast::Infix::Par,
+                    ast::UnsimplifiedInfix::Par,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('D', 0).strict().unwrap(),
                     )),
@@ -411,7 +447,7 @@ mod reduced {
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('A', 0).strict().unwrap(),
             )),
-            ast::Infix::Lollipop,
+            ast::UnsimplifiedInfix::Lollipop,
             Box::new(ast::Unsimplified::Value(
                 Name::from_char('B', 0).strict().unwrap(),
             )),
@@ -447,7 +483,7 @@ mod reduced {
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('A', 0).strict().unwrap()
                     )),
-                    ast::Infix::Times,
+                    ast::UnsimplifiedInfix::Times,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('B', 0).strict().unwrap()
                     )),
@@ -470,7 +506,7 @@ mod reduced {
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('A', 0).strict().unwrap()
                     )),
-                    ast::Infix::Times,
+                    ast::UnsimplifiedInfix::Times,
                     Box::new(ast::Unsimplified::Value(
                         Name::from_char('B', 0).strict().unwrap()
                     )),
@@ -497,9 +533,32 @@ mod reduced {
             ),
         );
     }
+
+    #[test]
+    fn all_roads_lead_to_funk_1() {
+        let orig = ast::Unsimplified::Unary(
+            ast::UnsimplifiedPrefix::Dual,
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
+                ast::UnsimplifiedInfix::Times,
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
+            )),
+        );
+        println!(
+            "\"{}\" ==> (\"{}\" =?= \"{}\")",
+            orig,
+            orig.clone().funk(),
+            orig.clone().simplify().funk()
+        );
+        assert_eq!(orig.clone().funk(), orig.simplify().funk());
+    }
 }
 
-#[cfg(feature = "quickcheck")] // not actually necessary but kindred spirits: please don't run miri on this
+#[cfg(feature = "systematic")]
 mod systematic {
     use crate::Spanned;
 
