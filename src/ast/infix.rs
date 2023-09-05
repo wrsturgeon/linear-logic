@@ -8,11 +8,15 @@
 
 /// Whatever character we end up choosing instead of an upside-down ampersand.
 pub const PAR: char = '@';
+/// Par as a string.
+pub const PAR_STR: &str = "@";
 
 /// Infix operators: times, plus, with, & par.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Infix {
+    /// Lollipop operator: basically resource-aware implication.
+    Lollipop,
     /// Additive disjunction, read as "plus."
     Plus,
     /// Additive conjunction, read as "with."
@@ -40,6 +44,7 @@ impl Infix {
     pub const fn associativity(self) -> Associativity {
         match self {
             Infix::Times | Infix::Plus | Infix::With | Infix::Par => Associativity::Left,
+            Infix::Lollipop => Associativity::Right,
         }
     }
 
@@ -73,10 +78,11 @@ impl core::fmt::Display for Infix {
             f,
             "{}",
             match self {
-                &Infix::Times => '*',
-                &Infix::Plus => '+',
-                &Infix::With => '&',
-                &Infix::Par => PAR,
+                &Infix::Times => "*",
+                &Infix::Plus => "+",
+                &Infix::With => "&",
+                &Infix::Par => PAR_STR,
+                &Infix::Lollipop => "->",
             }
         )
     }
@@ -87,8 +93,14 @@ impl quickcheck::Arbitrary for Infix {
     #[inline]
     #[allow(clippy::unwrap_used)]
     fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-        *g.choose(&[Infix::Times, Infix::Plus, Infix::With, Infix::Par])
-            .unwrap()
+        *g.choose(&[
+            Infix::Times,
+            Infix::Plus,
+            Infix::With,
+            Infix::Par,
+            Infix::Lollipop,
+        ])
+        .unwrap()
     }
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -97,6 +109,9 @@ impl quickcheck::Arbitrary for Infix {
             &Infix::With => Box::new(core::iter::once(Infix::Plus)),
             &Infix::Par => Box::new([Infix::Plus, Infix::With].into_iter()),
             &Infix::Times => Box::new([Infix::Plus, Infix::With, Infix::Par].into_iter()),
+            &Infix::Lollipop => {
+                Box::new([Infix::Plus, Infix::With, Infix::Par, Infix::Times].into_iter())
+            }
         }
     }
 }

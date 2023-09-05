@@ -53,7 +53,7 @@ impl<M: Ord + Display> Ord for Spanned<M> {
 impl<M: Display> Display for Spanned<M> {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Error (\"{}\") at character #{}", self.msg, self.index)
+        write!(f, "Incident ({}) at character #{}.", self.msg, self.index)
     }
 }
 

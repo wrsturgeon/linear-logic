@@ -28,7 +28,7 @@ impl Name {
             Triage::Okay(Self(c))
         } else {
             Triage::Error(Spanned {
-                msg: Error::InvalidName(c),
+                msg: Error::InvalidName,
                 index: i,
             })
         }

@@ -15,6 +15,7 @@ use crate::{
 use core::iter::Enumerate;
 
 /// Any non-fatal warning that could occur parsing a linear-logic expression.
+#[repr(u8)]
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Warning {
@@ -33,26 +34,35 @@ pub enum Warning {
 impl core::fmt::Display for Warning {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "[TODO: `Warning` formatting]")
+        write!(
+            f,
+            "{}",
+            match self {
+                &Self::UnnecessaryParens => "unnecessary parentheses",
+                &Self::UnnecessarySpace => "unnecessary space",
+                &Self::TrailingSpace => "trailing space",
+                &Self::LeadingSpace => "leading space",
+                &Self::MissingInfixSpace => "missing a space around an infix operator",
+            }
+        )
     }
 }
 
 /// Any fatal error that could occur parsing a linear-logic expression.
+#[repr(u8)]
 #[non_exhaustive]
-#[cfg_attr(test, allow(variant_size_differences))]
-#[cfg_attr(not(test), derive(Copy))]
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Error {
     /// Empty expression: e.g. "" or "()".
     EmptyExpression,
     /// Iterator ended but we needed more input.
     End,
     /// Unrecognized infix operator.
-    UnrecognizedInfixOperator(char),
+    UnrecognizedInfixOperator,
     /// Unrecognized prefix operator.
-    UnrecognizedPrefix(char),
+    UnrecognizedPrefix,
     /// Used an infix operator without an argument to its left.
-    InfixWithoutLeftOperand(u8),
+    InfixWithoutLeftOperand,
     /// Used an infix operator without an argument to its right.
     InfixWithoutRightOperand,
     /// Missing a left (opening) parenthesis.
@@ -60,10 +70,7 @@ pub enum Error {
     /// Missing a right (closing) parenthesis.
     MissingRightParen,
     /// Invalid name.
-    InvalidName(char),
-    #[cfg(test)]
-    /// State not separated when calling `start`. Internal use only.
-    StateNotSeparated(Vec<char>),
+    InvalidName,
     /// Maximum parentheses depth exceeded: e.g. `((((((((((...))))))))))`
     MaxDepth,
 }
@@ -71,7 +78,22 @@ pub enum Error {
 impl core::fmt::Display for Error {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "[TODO: `Error` formatting]")
+        write!(
+            f,
+            "{}",
+            match self {
+                &Self::EmptyExpression => "empty expression",
+                &Self::End => "unexpected end of input",
+                &Self::UnrecognizedInfixOperator => "unrecognized infix operator",
+                &Self::UnrecognizedPrefix => "unrecognized prefix operator",
+                &Self::InfixWithoutLeftOperand => "infix operator without a left operand",
+                &Self::InfixWithoutRightOperand => "infix operator without a right operand",
+                &Self::MissingLeftParen => "missing a left (opening) parenthesis",
+                &Self::MissingRightParen => "missing a right (closing) parenthesis",
+                &Self::InvalidName => "invalid character in a name",
+                &Self::MaxDepth => "maximum parentheses exceeded",
+            }
+        )
     }
 }
 
@@ -146,16 +168,16 @@ where
                 index: usize::MAX,
             }),
             Some((index, c)) => match c.into() {
-                '!' => state.check_sep(index).and_then(|_| {
+                '!' => state.check_sep(index).and_then(|()| {
                     nonbinary(iter, state).map(|nb| Nonbinary::Unary(Prefix::Bang, Box::new(nb)))
                 }),
-                '?' => state.check_sep(index).and_then(|_| {
+                '?' => state.check_sep(index).and_then(|()| {
                     nonbinary(iter, state).map(|nb| Nonbinary::Unary(Prefix::Quest, Box::new(nb)))
                 }),
-                '~' => state.check_sep(index).and_then(|_| {
+                '~' => state.check_sep(index).and_then(|()| {
                     nonbinary(iter, state).map(|nb| Nonbinary::Unary(Prefix::Dual, Box::new(nb)))
                 }),
-                '(' => state.check_sep(index).and_then(|_| {
+                '(' => state.check_sep(index).and_then(|()| {
                     if let Some(incr) = state.depth.checked_add(1) {
                         state.depth = incr;
                     } else {
@@ -225,7 +247,7 @@ where
                     }
                     continue;
                 }
-                name => state.check_sep(index).and_then(|_| {
+                name => state.check_sep(index).and_then(|()| {
                     state.separated = false;
                     Name::from_char(name, index).map(Nonbinary::Value)
                 }),
@@ -318,21 +340,40 @@ where
                     }
                     continue;
                 }
-                '*' => state.check_sep(index).and_then(|_| {
+                '*' => state.check_sep(index).and_then(|()| {
                     state.separated = false;
                     nonbinary(iter, state).map(|nb| Some((Infix::Times, nb)))
                 }),
-                '+' => state.check_sep(index).and_then(|_| {
+                '+' => state.check_sep(index).and_then(|()| {
                     state.separated = false;
                     nonbinary(iter, state).map(|nb| Some((Infix::Plus, nb)))
                 }),
-                '&' => state.check_sep(index).and_then(|_| {
+                '&' => state.check_sep(index).and_then(|()| {
                     state.separated = false;
                     nonbinary(iter, state).map(|nb| Some((Infix::With, nb)))
                 }),
-                PAR => state.check_sep(index).and_then(|_| {
+                PAR => state.check_sep(index).and_then(|()| {
                     state.separated = false;
                     nonbinary(iter, state).map(|nb| Some((Infix::Par, nb)))
+                }),
+                '-' => state.check_sep(index).and_then(|()| {
+                    state.separated = false;
+                    match iter.next() {
+                        None => Triage::Error(Spanned {
+                            msg: Error::End,
+                            index: usize::MAX,
+                        }),
+                        Some((idx, tip)) => {
+                            if tip.into() == '>' {
+                                nonbinary(iter, state).map(|nb| Some((Infix::Lollipop, nb)))
+                            } else {
+                                Triage::Error(Spanned {
+                                    msg: Error::UnrecognizedInfixOperator,
+                                    index: idx,
+                                })
+                            }
+                        }
+                    }
                 }),
                 ')' => {
                     if let Some(decr) = state.depth.checked_sub(1) {
@@ -356,8 +397,8 @@ where
                         })
                     }
                 }
-                unrecognized => Triage::Error(Spanned {
-                    msg: Error::UnrecognizedInfixOperator(unrecognized),
+                _ => Triage::Error(Spanned {
+                    msg: Error::UnrecognizedInfixOperator,
                     index,
                 }),
             }

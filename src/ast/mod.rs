@@ -14,7 +14,7 @@ pub(crate) mod tree;
 
 pub(crate) use nonbinary::Nonbinary;
 pub use {
-    infix::{Associativity, Infix, PAR},
+    infix::{Associativity, Infix, PAR, PAR_STR},
     name::Name,
     prefix::Prefix,
     tree::Tree,

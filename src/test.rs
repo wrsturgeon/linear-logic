@@ -340,6 +340,19 @@ mod reduced {
     }
 
     #[test]
+    fn roundtrip_expr_bytes_8() {
+        let tree = ast::Tree::Binary(
+            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            ast::Infix::Lollipop,
+            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "A -> B");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_1() {
         assert_eq!(
@@ -457,7 +470,7 @@ mod systematic {
     #[test]
     #[allow(unreachable_code, unused_mut, unused_variables)] // FIXME
     fn exhaustive_and_valid_iff_both_unique_and_shortest() {
-        const MAX_LEN: usize = 11;
+        const MAX_LEN: usize = 13;
         let mut v = vec![0];
         let mut exhaustive: std::collections::HashMap<ast::Tree, bool> =
             ast::Tree::exhaustive_to_length(MAX_LEN, false)
