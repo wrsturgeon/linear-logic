@@ -7,7 +7,7 @@
 //! Anything but a binary operation (e.g. not `A * B`).
 
 use crate::{
-    ast::{tree::SyntaxAware, Infix, Name, Prefix, Tree},
+    ast::{unsimplified::SyntaxAware, Infix, Name, Prefix, Unsimplified},
     parse, Triage,
 };
 
@@ -27,14 +27,17 @@ impl Nonbinary {
     #[inline]
     #[must_use]
     #[allow(clippy::only_used_in_recursion, clippy::similar_names)]
-    pub(crate) fn into_tree(self) -> Triage<Tree, parse::Warning, parse::Error> {
+    pub(crate) fn into_unsimplified(self) -> Triage<Unsimplified, parse::Warning, parse::Error> {
         match self {
-            Nonbinary::Value(v) => Triage::Okay(Tree::Value(v)),
-            Nonbinary::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
+            Nonbinary::Value(v) => Triage::Okay(Unsimplified::Value(v)),
+            Nonbinary::Unary(op, arg) => arg
+                .into_unsimplified()
+                .map(|a| Unsimplified::Unary(op, Box::new(a))),
             Nonbinary::Parenthesized(lhs, op, rhs, _) => {
                 lhs.into_tree(None, Some(op)).and_then(|tl| {
-                    rhs.into_tree(Some(op), None)
-                        .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+                    rhs.into_tree(Some(op), None).and_then(|tr| {
+                        Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
+                    })
                 })
             }
         }

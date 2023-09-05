@@ -58,7 +58,9 @@ mod unit {
     fn name() {
         assert_eq!(
             parse("A".chars()),
-            Triage::Okay(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            Triage::Okay(ast::Unsimplified::Value(
+                Name::from_char('A', 0).strict().unwrap()
+            )),
         );
     }
 
@@ -66,9 +68,11 @@ mod unit {
     fn bang() {
         assert_eq!(
             parse("!A".chars()),
-            Triage::Okay(ast::Tree::Unary(
+            Triage::Okay(ast::Unsimplified::Unary(
                 ast::Prefix::Bang,
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap()
+                )),
             )),
         );
     }
@@ -77,10 +81,14 @@ mod unit {
     fn times() {
         assert_eq!(
             parse("A * B".chars()),
-            Triage::Okay(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            Triage::Okay(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap()
+                )),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('B', 0).strict().unwrap()
+                )),
             )),
         );
     }
@@ -89,13 +97,19 @@ mod unit {
     fn plus_times_no_paren() {
         assert_eq!(
             parse("A + B * C".chars()),
-            Triage::Okay(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            Triage::Okay(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap()
+                )),
                 ast::Infix::Plus,
-                Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('B', 0).strict().unwrap()
+                    )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('C', 0).strict().unwrap()
+                    )),
                 )),
             )),
         );
@@ -106,9 +120,11 @@ mod unit {
         assert_eq!(
             parse("! A".chars()),
             Triage::Warn(
-                ast::Tree::Unary(
+                ast::Unsimplified::Unary(
                     ast::Prefix::Bang,
-                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()))
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('A', 0).strict().unwrap()
+                    ))
                 ),
                 Spanned {
                     msg: parse::Warning::UnnecessarySpace,
@@ -123,13 +139,19 @@ mod unit {
         assert_eq!(
             parse("A + (B * C)".chars()),
             Triage::Warn(
-                ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('A', 0).strict().unwrap()
+                    )),
                     ast::Infix::Plus,
-                    Box::new(ast::Tree::Binary(
-                        Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Binary(
+                        Box::new(ast::Unsimplified::Value(
+                            Name::from_char('B', 0).strict().unwrap()
+                        )),
                         ast::Infix::Times,
-                        Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                        Box::new(ast::Unsimplified::Value(
+                            Name::from_char('C', 0).strict().unwrap()
+                        )),
                     )),
                 ),
                 Spanned {
@@ -145,14 +167,20 @@ mod unit {
         assert_eq!(
             parse("((A + B)) * C".chars()),
             Triage::Warn(
-                ast::Tree::Binary(
-                    Box::new(ast::Tree::Binary(
-                        Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Binary(
+                        Box::new(ast::Unsimplified::Value(
+                            Name::from_char('A', 0).strict().unwrap()
+                        )),
                         ast::Infix::Plus,
-                        Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                        Box::new(ast::Unsimplified::Value(
+                            Name::from_char('B', 0).strict().unwrap()
+                        )),
                     )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('C', 0).strict().unwrap()
+                    )),
                 ),
                 Spanned {
                     msg: parse::Warning::UnnecessaryParens,
@@ -167,7 +195,7 @@ mod unit {
         assert_eq!(
             parse("   A".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::LeadingSpace,
                     index: 0,
@@ -181,7 +209,7 @@ mod unit {
         assert_eq!(
             parse("A   ".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::TrailingSpace,
                     index: usize::MAX,
@@ -196,7 +224,7 @@ mod prop {
     use super::*;
 
     quickcheck::quickcheck! {
-        fn roundtrip_expr_bytes(tree: ast::Tree) -> bool {
+        fn roundtrip_expr_bytes(tree: ast::Unsimplified) -> bool {
             let printed = format!("{tree}");
             let parsed = parse(printed.chars());
             parsed == Triage::Okay(tree)
@@ -221,10 +249,14 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_1() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('A', 0).strict().unwrap(),
+            )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('B', 0).strict().unwrap(),
+            )),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "A * B");
@@ -234,13 +266,17 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_2() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Unary(
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Unary(
                 ast::Prefix::Bang,
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
             )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('B', 0).strict().unwrap(),
+            )),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "!A * B");
@@ -250,12 +286,16 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_3() {
-        let tree = ast::Tree::Unary(
+        let tree = ast::Unsimplified::Unary(
             ast::Prefix::Bang,
-            Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('B', 0).strict().unwrap(),
+                )),
             )),
         );
         let printed = format!("{tree}");
@@ -266,14 +306,20 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_4() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
                 ast::Infix::Plus,
-                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('B', 0).strict().unwrap(),
+                )),
             )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('C', 0).strict().unwrap(),
+            )),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "(A + B) * C");
@@ -283,13 +329,19 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_5() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('A', 0).strict().unwrap(),
+            )),
             ast::Infix::Times,
-            Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('B', 0).strict().unwrap(),
+                )),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('C', 0).strict().unwrap(),
+                )),
             )),
         );
         let printed = format!("{tree}");
@@ -300,15 +352,21 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_6() {
-        let tree = ast::Tree::Unary(
+        let tree = ast::Unsimplified::Unary(
             ast::Prefix::Bang,
-            Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('A', 0).strict().unwrap(),
+                )),
                 ast::Infix::Times,
-                Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('B', 0).strict().unwrap(),
+                    )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('C', 0).strict().unwrap(),
+                    )),
                 )),
             )),
         );
@@ -320,16 +378,24 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_7() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('A', 0).strict().unwrap(),
+            )),
             ast::Infix::Plus,
-            Box::new(ast::Tree::Binary(
-                Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Value(
+                    Name::from_char('B', 0).strict().unwrap(),
+                )),
                 ast::Infix::With,
-                Box::new(ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('C', 0).strict().unwrap())),
+                Box::new(ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('C', 0).strict().unwrap(),
+                    )),
                     ast::Infix::Par,
-                    Box::new(ast::Tree::Value(Name::from_char('D', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('D', 0).strict().unwrap(),
+                    )),
                 )),
             )),
         );
@@ -341,10 +407,14 @@ mod reduced {
 
     #[test]
     fn roundtrip_expr_bytes_8() {
-        let tree = ast::Tree::Binary(
-            Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('A', 0).strict().unwrap(),
+            )),
             ast::Infix::Lollipop,
-            Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+            Box::new(ast::Unsimplified::Value(
+                Name::from_char('B', 0).strict().unwrap(),
+            )),
         );
         let printed = format!("{tree}");
         assert_eq!(printed, "A -> B");
@@ -358,7 +428,7 @@ mod reduced {
         assert_eq!(
             parse("A ".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::TrailingSpace,
                     index: usize::MAX,
@@ -373,10 +443,14 @@ mod reduced {
         assert_eq!(
             parse("A* B".chars()),
             Triage::Warn(
-                ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('A', 0).strict().unwrap()
+                    )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('B', 0).strict().unwrap()
+                    )),
                 ),
                 Spanned {
                     msg: parse::Warning::MissingInfixSpace,
@@ -392,10 +466,14 @@ mod reduced {
         assert_eq!(
             parse("A *B".chars()),
             Triage::Warn(
-                ast::Tree::Binary(
-                    Box::new(ast::Tree::Value(Name::from_char('A', 0).strict().unwrap())),
+                ast::Unsimplified::Binary(
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('A', 0).strict().unwrap()
+                    )),
                     ast::Infix::Times,
-                    Box::new(ast::Tree::Value(Name::from_char('B', 0).strict().unwrap())),
+                    Box::new(ast::Unsimplified::Value(
+                        Name::from_char('B', 0).strict().unwrap()
+                    )),
                 ),
                 Spanned {
                     msg: parse::Warning::MissingInfixSpace,
@@ -411,7 +489,7 @@ mod reduced {
         assert_eq!(
             parse("(A)".chars()),
             Triage::Warn(
-                ast::Tree::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::UnnecessaryParens,
                     index: 0, // TODO: arguable, could be 1
@@ -472,8 +550,8 @@ mod systematic {
     fn exhaustive_and_valid_iff_both_unique_and_shortest() {
         const MAX_LEN: usize = 13;
         let mut v = vec![0];
-        let mut exhaustive: std::collections::HashMap<ast::Tree, bool> =
-            ast::Tree::exhaustive_to_length(MAX_LEN, false)
+        let mut exhaustive: std::collections::HashMap<ast::Unsimplified, bool> =
+            ast::Unsimplified::exhaustive_to_length(MAX_LEN, false)
                 .into_iter()
                 .filter_map(|t| (format!("{t}").len() <= MAX_LEN).then_some((t, false)))
                 .collect();

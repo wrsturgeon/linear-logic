@@ -9,7 +9,7 @@
 // TODO: abolish `usize::MAX`
 
 use crate::{
-    ast::{tree::SyntaxAware, Infix, Name, Nonbinary, Prefix, Tree, PAR},
+    ast::{unsimplified::SyntaxAware, Infix, Name, Nonbinary, Prefix, Unsimplified, PAR},
     Spanned, Triage,
 };
 use core::iter::Enumerate;
@@ -138,7 +138,7 @@ impl State {
 
 /// Parse a linear-logic expression from an iterator over anything that can be converted to characters.
 #[inline(always)]
-pub fn parse<I: IntoIterator>(i: I) -> Triage<Tree, Warning, Error>
+pub fn parse<I: IntoIterator>(i: I) -> Triage<Unsimplified, Warning, Error>
 where
     I::Item: Into<char>,
 {

@@ -34,13 +34,16 @@ impl SyntaxAware {
         self,
         lnbr: Option<Infix>,
         rnbr: Option<Infix>,
-    ) -> Triage<Tree, parse::Warning, parse::Error> {
+    ) -> Triage<Unsimplified, parse::Warning, parse::Error> {
         match self {
-            SyntaxAware::Value(v) => Triage::Okay(Tree::Value(v)),
-            SyntaxAware::Unary(op, arg) => arg.into_tree().map(|a| Tree::Unary(op, Box::new(a))),
+            SyntaxAware::Value(v) => Triage::Okay(Unsimplified::Value(v)),
+            SyntaxAware::Unary(op, arg) => arg
+                .into_unsimplified()
+                .map(|a| Unsimplified::Unary(op, Box::new(a))),
             SyntaxAware::Binary(lhs, op, rhs) => lhs.into_tree(lnbr, Some(op)).and_then(|tl| {
-                rhs.into_tree(Some(op), rnbr)
-                    .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+                rhs.into_tree(Some(op), rnbr).and_then(|tr| {
+                    Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
+                })
             }),
             SyntaxAware::Parenthesized(lhs, op, rhs, index) => if lnbr
                 .map_or(false, |other| op.weaker_to_the_right_of(other))
@@ -58,8 +61,9 @@ impl SyntaxAware {
             }
             .and_then(|()| {
                 lhs.into_tree(None, Some(op)).and_then(|tl| {
-                    rhs.into_tree(Some(op), None)
-                        .and_then(|tr| Triage::Okay(Tree::Binary(Box::new(tl), op, Box::new(tr))))
+                    rhs.into_tree(Some(op), None).and_then(|tr| {
+                        Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
+                    })
                 })
             }),
         }
@@ -69,24 +73,24 @@ impl SyntaxAware {
 /// Linear-logic expressions as heap trees.
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum Tree {
+pub enum Unsimplified {
     /// Raw name: e.g. `A`.
     Value(Name),
     /// Unary operation: e.g. `?A`.
-    Unary(Prefix, Box<Tree>),
+    Unary(Prefix, Box<Unsimplified>),
     /// Binary operation: e.g. `A * B`.
-    Binary(Box<Tree>, Infix, Box<Tree>),
+    Binary(Box<Unsimplified>, Infix, Box<Unsimplified>),
 }
 
-impl Tree {
+impl Unsimplified {
     /// Get the topmost binary operation.
     #[inline]
     #[must_use]
     pub const fn top_bin_op(&self) -> Option<Infix> {
         match self {
-            &Tree::Value(_) => None,
-            &Tree::Unary(_, ref arg) => arg.top_bin_op(),
-            &Tree::Binary(_, op, _) => Some(op),
+            &Unsimplified::Value(_) => None,
+            &Unsimplified::Unary(_, ref arg) => arg.top_bin_op(),
+            &Unsimplified::Binary(_, op, _) => Some(op),
         }
     }
     /// Display with knowledge of our neighbors to inform parenthesization.
@@ -99,9 +103,9 @@ impl Tree {
     )]
     pub fn display(&self, lnbr: Option<Infix>, rnbr: Option<Infix>) -> (String, Option<Infix>) {
         match self {
-            &Tree::Value(name) => (core::iter::once(char::from(name)).collect(), None),
-            &Tree::Unary(op, ref arg) => {
-                if let &Tree::Binary(_, _, _) = arg.as_ref() {
+            &Unsimplified::Value(name) => (core::iter::once(char::from(name)).collect(), None),
+            &Unsimplified::Unary(op, ref arg) => {
+                if let &Unsimplified::Binary(_, _, _) = arg.as_ref() {
                     (
                         op.to_string() + "(" + &arg.display(None, None).0 + ")",
                         None,
@@ -110,7 +114,7 @@ impl Tree {
                     (op.to_string() + &arg.display(None, None).0, None)
                 }
             }
-            &Tree::Binary(ref lhs, op, ref rhs) => {
+            &Unsimplified::Binary(ref lhs, op, ref rhs) => {
                 // We should never surround ourselves in parentheses, only our left- and right-children.
                 // This way the top level is never parenthesized pointlessly (and this probably makes sense recursively).
                 let mut s = String::new();
@@ -147,7 +151,7 @@ impl Tree {
     #[inline]
     #[must_use]
     #[cfg(test)]
-    pub fn exhaustive_to_depth(depth: usize) -> Vec<Tree> {
+    pub fn exhaustive_to_depth(depth: usize) -> Vec<Unsimplified> {
         depth.checked_sub(1).map_or(vec![], |next_depth| {
             let rec = Self::exhaustive_to_depth(next_depth).into_iter();
             core::iter::once(Self::Value(
@@ -171,7 +175,7 @@ impl Tree {
     #[inline]
     #[must_use]
     #[cfg(test)]
-    pub fn exhaustive_to_length(len: usize, paren: bool) -> Vec<Tree> {
+    pub fn exhaustive_to_length(len: usize, paren: bool) -> Vec<Unsimplified> {
         if len == 0 {
             return vec![];
         }
@@ -209,7 +213,7 @@ impl Tree {
     }
 }
 
-impl core::fmt::Display for Tree {
+impl core::fmt::Display for Unsimplified {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.display(None, None).0)
@@ -217,7 +221,7 @@ impl core::fmt::Display for Tree {
 }
 
 #[cfg(feature = "quickcheck")]
-impl quickcheck::Arbitrary for Tree {
+impl quickcheck::Arbitrary for Unsimplified {
     #[inline]
     #[allow(
         clippy::as_conversions,
@@ -229,17 +233,17 @@ impl quickcheck::Arbitrary for Tree {
         g.choose(
             &[
                 (|s| {
-                    Tree::Value(Name::arbitrary(&mut quickcheck::Gen::new(
+                    Unsimplified::Value(Name::arbitrary(&mut quickcheck::Gen::new(
                         s.saturating_sub(1),
                     )))
                 }) as fn(usize) -> Self,
                 |s| {
                     let mut r = quickcheck::Gen::new(s.saturating_sub(1));
-                    Tree::Unary(Prefix::arbitrary(&mut r), Box::arbitrary(&mut r))
+                    Unsimplified::Unary(Prefix::arbitrary(&mut r), Box::arbitrary(&mut r))
                 },
                 |s| {
                     let mut r = quickcheck::Gen::new(s.saturating_sub(1) >> 1);
-                    Tree::Binary(
+                    Unsimplified::Binary(
                         Box::arbitrary(&mut r),
                         Infix::arbitrary(&mut r),
                         Box::arbitrary(&mut r),
@@ -252,22 +256,22 @@ impl quickcheck::Arbitrary for Tree {
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            &Tree::Value(c) => Box::new(c.shrink().map(Tree::Value)),
-            &Tree::Unary(prefix, ref arg) => Box::new(
+            &Unsimplified::Value(c) => Box::new(c.shrink().map(Unsimplified::Value)),
+            &Unsimplified::Unary(prefix, ref arg) => Box::new(
                 arg.as_ref().shrink().chain(
                     (prefix, arg.clone())
                         .shrink()
-                        .map(|(p, a)| Tree::Unary(p, a)),
+                        .map(|(p, a)| Unsimplified::Unary(p, a)),
                 ),
             ),
-            &Tree::Binary(ref lhs, infix, ref rhs) => Box::new(
-                Tree::Unary(Prefix::Quest, lhs.clone())
+            &Unsimplified::Binary(ref lhs, infix, ref rhs) => Box::new(
+                Unsimplified::Unary(Prefix::Quest, lhs.clone())
                     .shrink()
-                    .chain(Tree::Unary(Prefix::Quest, rhs.clone()).shrink())
+                    .chain(Unsimplified::Unary(Prefix::Quest, rhs.clone()).shrink())
                     .chain(
                         (lhs.clone(), infix, rhs.clone())
                             .shrink()
-                            .map(|(l, i, r)| Tree::Binary(l, i, r)),
+                            .map(|(l, i, r)| Unsimplified::Binary(l, i, r)),
                     ),
             ),
         }
