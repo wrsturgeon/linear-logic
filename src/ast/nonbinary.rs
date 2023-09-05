@@ -55,6 +55,18 @@ impl Nonbinary {
             &mut Self::Parenthesized(..) => None,
         }
     }
+
+    /// Mutate leaves (names) with some function.
+    #[inline]
+    pub(crate) fn map<F: Fn(String) -> String>(self, f: &F) -> Self {
+        match self {
+            Self::Atomic(atom) => Self::Atomic(atom.map(f)),
+            Self::Unary(op, nb) => Self::Unary(op, Box::new(nb.map(f))),
+            Self::Parenthesized(lhs, op, rhs, i) => {
+                Self::Parenthesized(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)), i)
+            }
+        }
+    }
 }
 
 impl From<Nonbinary> for SyntaxAware {

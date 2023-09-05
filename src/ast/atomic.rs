@@ -138,6 +138,15 @@ impl Atomic {
             &mut (Self::Zero | Self::One | Self::Bottom | Self::Top) => None,
         }
     }
+
+    /// Mutate leaves (names) with some function.
+    #[inline]
+    pub fn map<F: Fn(String) -> String>(self, f: F) -> Self {
+        match self {
+            Self::Bound(s) => Self::Bound(f(s)),
+            Self::Zero | Self::One | Self::Bottom | Self::Top => self,
+        }
+    }
 }
 
 impl core::fmt::Display for Atomic {

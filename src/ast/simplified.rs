@@ -102,6 +102,19 @@ impl Simplified {
             },
         }
     }
+
+    /// Mutate leaves (names) with some function.
+    #[inline]
+    pub fn map<F: Fn(String) -> String>(self, f: &F) -> Self {
+        match self {
+            Self::Atomic(atom) => Self::Atomic(atom.map(f)),
+            Self::Dual(name) => Self::Dual(f(name)),
+            Self::Unary(op, nb) => Self::Unary(op, Box::new(nb.map(f))),
+            Self::Binary(lhs, op, rhs) => {
+                Self::Binary(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)))
+            }
+        }
+    }
 }
 
 #[cfg(feature = "quickcheck")]

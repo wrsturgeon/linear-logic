@@ -84,6 +84,22 @@ impl SyntaxAware {
             &mut Self::Parenthesized(..) => None,
         }
     }
+
+    /// Mutate leaves (names) with some function.
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn map<F: Fn(String) -> String>(self, f: &F) -> Self {
+        match self {
+            Self::Atomic(atom) => Self::Atomic(atom.map(f)),
+            Self::Unary(op, nb) => Self::Unary(op, Box::new(nb.map(f))),
+            Self::Binary(lhs, op, rhs) => {
+                Self::Binary(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)))
+            }
+            Self::Parenthesized(lhs, op, rhs, i) => {
+                Self::Parenthesized(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)), i)
+            }
+        }
+    }
 }
 
 /// Unsimplified linear-logic expressions as heap trees.
@@ -364,6 +380,18 @@ impl Unsimplified {
             }
         }
         v
+    }
+
+    /// Mutate leaves (names) with some function.
+    #[inline]
+    pub fn map<F: Fn(String) -> String>(self, f: &F) -> Self {
+        match self {
+            Self::Atomic(atom) => Self::Atomic(atom.map(f)),
+            Self::Unary(op, nb) => Self::Unary(op, Box::new(nb.map(f))),
+            Self::Binary(lhs, op, rhs) => {
+                Self::Binary(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)))
+            }
+        }
     }
 }
 
