@@ -7,7 +7,7 @@
 //! Par-less linear-logic expressions as heap trees.
 
 use crate::ast::{
-    FunkyInfix as Infix, Name, Simplified, SimplifiedInfix, SimplifiedPrefix as Prefix,
+    Atomic, FunkyInfix as Infix, Simplified, SimplifiedInfix, SimplifiedPrefix as Prefix,
     Unsimplified, UnsimplifiedPrefix,
 };
 
@@ -15,10 +15,10 @@ use crate::ast::{
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Funky {
-    /// Raw name: e.g. `A`.
-    Value(Name),
+    /// Raw value: e.g. `A`, `0`, bottom, etc.
+    Atomic(Atomic),
     /// Dual of a raw value: e.g. `~A`.
-    Dual(Name),
+    Dual(String),
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Funky>),
     /// Binary operation: e.g. `A * B`.
@@ -29,10 +29,10 @@ impl From<Funky> for Unsimplified {
     #[inline]
     fn from(value: Funky) -> Self {
         match value {
-            Funky::Value(name) => Unsimplified::Value(name),
+            Funky::Atomic(atom) => Unsimplified::Atomic(atom),
             Funky::Dual(name) => Unsimplified::Unary(
                 UnsimplifiedPrefix::Dual,
-                Box::new(Unsimplified::Value(name)),
+                Box::new(Unsimplified::Atomic(Atomic::Bound(name))),
             ),
             Funky::Unary(op, arg) => Unsimplified::Unary(op.into(), Box::new((*arg).into())),
             Funky::Binary(lhs, op, rhs) => {
@@ -43,7 +43,8 @@ impl From<Funky> for Unsimplified {
 }
 
 impl core::fmt::Display for Funky {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(&Unsimplified::from(self.clone()), f)
     }
 }
@@ -54,8 +55,8 @@ impl Funky {
     #[must_use]
     pub fn dual(self) -> Self {
         match self {
-            Self::Value(name) => Self::Dual(name),
-            Self::Dual(name) => Self::Value(name),
+            Self::Atomic(atom) => atom.funky_dual(),
+            Self::Dual(name) => Self::Atomic(Atomic::Bound(name)),
             Self::Unary(op, arg) => Self::Unary(op.dual(), Box::new(arg.dual())),
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => Simplified::Binary(
@@ -85,7 +86,7 @@ impl Funky {
     #[must_use]
     pub fn simplify(self) -> Simplified {
         match self {
-            Self::Value(name) => Simplified::Value(name),
+            Self::Atomic(atom) => Simplified::Atomic(atom),
             Self::Dual(name) => Simplified::Dual(name),
             Self::Unary(op, arg) => Simplified::Unary(op, Box::new(arg.simplify())),
             Self::Binary(lhs, op, rhs) => match op {
@@ -130,37 +131,45 @@ impl quickcheck::Arbitrary for Funky {
         g.choose(
             &[
                 (|s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1));
-                    let name = Name::arbitrary(&mut r);
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(1));
+                    let atom = Atomic::arbitrary(&mut r);
                     if bool::arbitrary(&mut r) {
-                        Funky::Value(name)
+                        Funky::Atomic(atom)
                     } else {
-                        Funky::Dual(name)
+                        let st = String::arbitrary(&mut r);
+                        let mut acc = Atomic::Bound(String::new());
+                        for c in st.chars() {
+                            #[allow(clippy::let_underscore_must_use)]
+                            let _ = acc.push::<core::convert::Infallible>(c, usize::MAX);
+                        }
+                        Funky::Dual(acc.to_string())
                     }
                 }) as fn(usize) -> Self,
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1));
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(1));
                     Funky::Unary(Prefix::arbitrary(&mut r), Box::arbitrary(&mut r))
                 },
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1) >> 1);
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(2) >> 1);
                     Funky::Binary(
                         Box::arbitrary(&mut r),
                         Infix::arbitrary(&mut r),
                         Box::arbitrary(&mut r),
                     )
                 },
-            ][..g.size().min(3)],
+            ][..g.size().clamp(1, 3)],
         )
         .unwrap()(g.size())
     }
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            &Funky::Value(c) => Box::new(c.shrink().map(Funky::Value)),
-            &Funky::Dual(c) => {
-                Box::new(Funky::Value(c).shrink().chain(c.shrink().map(Funky::Dual)))
-            }
+            &Funky::Atomic(ref atom) => Box::new(atom.shrink().map(Funky::Atomic)),
+            &Funky::Dual(ref name) => Box::new(
+                Funky::Atomic(Atomic::Top)
+                    .shrink()
+                    .chain(name.shrink().map(Funky::Dual)),
+            ),
             &Funky::Unary(prefix, ref arg) => Box::new(
                 arg.as_ref().shrink().chain(
                     (prefix, arg.clone())

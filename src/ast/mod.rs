@@ -6,9 +6,9 @@
 
 //! Linear-logic expressions as heap trees.
 
+mod atomic;
 mod funky;
 mod infix;
-mod name;
 mod nonbinary;
 mod prefix;
 mod simplified;
@@ -16,9 +16,9 @@ pub(crate) mod unsimplified;
 
 pub(crate) use nonbinary::Nonbinary;
 pub use {
+    atomic::Atomic,
     funky::Funky,
     infix::{Associativity, FunkyInfix, SimplifiedInfix, UnsimplifiedInfix, PAR, PAR_STR},
-    name::Name,
     prefix::{SimplifiedPrefix, UnsimplifiedPrefix},
     simplified::Simplified,
     unsimplified::Unsimplified,

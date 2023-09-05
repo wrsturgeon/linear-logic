@@ -14,7 +14,7 @@
 )]
 
 use crate::{
-    ast::{self, Name},
+    ast::{self, Atomic},
     parse, Spanned, Triage,
 };
 
@@ -57,9 +57,9 @@ mod unit {
     #[test]
     fn name() {
         assert_eq!(
-            parse("A".chars()),
-            Triage::Okay(ast::Unsimplified::Value(
-                Name::from_char('A', 0).strict().unwrap()
+            parse("a".chars()),
+            Triage::Okay(ast::Unsimplified::Atomic(
+                Atomic::from_char('a', 0).strict().unwrap()
             )),
         );
     }
@@ -67,11 +67,11 @@ mod unit {
     #[test]
     fn bang() {
         assert_eq!(
-            parse("!A".chars()),
+            parse("!a".chars()),
             Triage::Okay(ast::Unsimplified::Unary(
                 ast::UnsimplifiedPrefix::Bang,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap()
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap()
                 )),
             )),
         );
@@ -80,14 +80,14 @@ mod unit {
     #[test]
     fn times() {
         assert_eq!(
-            parse("A * B".chars()),
+            parse("a * b".chars()),
             Triage::Okay(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap()
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap()
                 )),
                 ast::UnsimplifiedInfix::Times,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('B', 0).strict().unwrap()
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('b', 0).strict().unwrap()
                 )),
             )),
         );
@@ -96,19 +96,19 @@ mod unit {
     #[test]
     fn plus_times_no_paren() {
         assert_eq!(
-            parse("A + B * C".chars()),
+            parse("a + b * c".chars()),
             Triage::Okay(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap()
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap()
                 )),
                 ast::UnsimplifiedInfix::Plus,
                 Box::new(ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('B', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('b', 0).strict().unwrap()
                     )),
                     ast::UnsimplifiedInfix::Times,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('C', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('c', 0).strict().unwrap()
                     )),
                 )),
             )),
@@ -118,12 +118,12 @@ mod unit {
     #[test]
     fn unnecessary_space() {
         assert_eq!(
-            parse("! A".chars()),
+            parse("! a".chars()),
             Triage::Warn(
                 ast::Unsimplified::Unary(
                     ast::UnsimplifiedPrefix::Bang,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('A', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('a', 0).strict().unwrap()
                     ))
                 ),
                 Spanned {
@@ -137,20 +137,20 @@ mod unit {
     #[test]
     fn unnecessary_parens() {
         assert_eq!(
-            parse("A + (B * C)".chars()),
+            parse("a + (b * c)".chars()),
             Triage::Warn(
                 ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('A', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('a', 0).strict().unwrap()
                     )),
                     ast::UnsimplifiedInfix::Plus,
                     Box::new(ast::Unsimplified::Binary(
-                        Box::new(ast::Unsimplified::Value(
-                            Name::from_char('B', 0).strict().unwrap()
+                        Box::new(ast::Unsimplified::Atomic(
+                            Atomic::from_char('b', 0).strict().unwrap()
                         )),
                         ast::UnsimplifiedInfix::Times,
-                        Box::new(ast::Unsimplified::Value(
-                            Name::from_char('C', 0).strict().unwrap()
+                        Box::new(ast::Unsimplified::Atomic(
+                            Atomic::from_char('c', 0).strict().unwrap()
                         )),
                     )),
                 ),
@@ -165,21 +165,21 @@ mod unit {
     #[test]
     fn double_parens() {
         assert_eq!(
-            parse("((A + B)) * C".chars()),
+            parse("((a + b)) * c".chars()),
             Triage::Warn(
                 ast::Unsimplified::Binary(
                     Box::new(ast::Unsimplified::Binary(
-                        Box::new(ast::Unsimplified::Value(
-                            Name::from_char('A', 0).strict().unwrap()
+                        Box::new(ast::Unsimplified::Atomic(
+                            Atomic::from_char('a', 0).strict().unwrap()
                         )),
                         ast::UnsimplifiedInfix::Plus,
-                        Box::new(ast::Unsimplified::Value(
-                            Name::from_char('B', 0).strict().unwrap()
+                        Box::new(ast::Unsimplified::Atomic(
+                            Atomic::from_char('b', 0).strict().unwrap()
                         )),
                     )),
                     ast::UnsimplifiedInfix::Times,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('C', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('c', 0).strict().unwrap()
                     )),
                 ),
                 Spanned {
@@ -193,9 +193,9 @@ mod unit {
     #[test]
     fn multiple_leading_spaces() {
         assert_eq!(
-            parse("   A".chars()),
+            parse("   a".chars()),
             Triage::Warn(
-                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Atomic(Atomic::from_char('a', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::LeadingSpace,
                     index: 0,
@@ -207,14 +207,35 @@ mod unit {
     #[test]
     fn multiple_trailing_spaces() {
         assert_eq!(
-            parse("A   ".chars()),
+            parse("a   ".chars()),
             Triage::Warn(
-                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Atomic(Atomic::from_char('a', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::TrailingSpace,
                     index: usize::MAX,
                 },
             ),
+        );
+    }
+
+    #[test]
+    fn multi_char_name() {
+        assert_eq!(
+            parse("abcdefg".chars()),
+            Triage::Okay(ast::Unsimplified::Atomic(
+                Atomic::from_str("abcdefg").strict().unwrap()
+            ))
+        );
+    }
+
+    #[test]
+    #[allow(clippy::non_ascii_literal)]
+    fn non_ascii_name() {
+        assert_eq!(
+            parse("garçon".chars()),
+            Triage::Okay(ast::Unsimplified::Atomic(
+                Atomic::from_str("gar\u{e7}on").strict().unwrap() // gar{c cedille}on
+            ))
         );
     }
 }
@@ -277,6 +298,13 @@ mod prop {
         fn all_roads_lead_to_funk(orig: ast::Unsimplified) -> bool {
             orig.clone().funk() == orig.simplify().funk()
         }
+
+        fn removing_spaces_doesnt_create_other_errors(orig: ast::Unsimplified, v: Vec<bool>) -> bool {
+            let mut v = v; // quickcheck necessity
+            let mut s = format!("{orig}");
+            s.retain(|c| (c != ' ') || v.pop().unwrap_or(false));
+            matches!(parse(s.chars()), Triage::Okay(_) | Triage::Warn(_, Spanned { msg: parse::Warning::MissingInfixSpace, .. }))
+        }
     }
 }
 
@@ -286,16 +314,16 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_1() {
         let tree = ast::Unsimplified::Binary(
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('A', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('a', 0).strict().unwrap(),
             )),
             ast::UnsimplifiedInfix::Times,
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('B', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('b', 0).strict().unwrap(),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "A * B");
+        assert_eq!(printed, "a * b");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -305,17 +333,17 @@ mod reduced {
         let tree = ast::Unsimplified::Binary(
             Box::new(ast::Unsimplified::Unary(
                 ast::UnsimplifiedPrefix::Bang,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
             )),
             ast::UnsimplifiedInfix::Times,
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('B', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('b', 0).strict().unwrap(),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "!A * B");
+        assert_eq!(printed, "!a * b");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -325,17 +353,17 @@ mod reduced {
         let tree = ast::Unsimplified::Unary(
             ast::UnsimplifiedPrefix::Bang,
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::Times,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('B', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('b', 0).strict().unwrap(),
                 )),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "!(A * B)");
+        assert_eq!(printed, "!(a * b)");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -344,21 +372,21 @@ mod reduced {
     fn roundtrip_expr_bytes_4() {
         let tree = ast::Unsimplified::Binary(
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::Plus,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('B', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('b', 0).strict().unwrap(),
                 )),
             )),
             ast::UnsimplifiedInfix::Times,
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('C', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('c', 0).strict().unwrap(),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "(A + B) * C");
+        assert_eq!(printed, "(a + b) * c");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -366,22 +394,22 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_5() {
         let tree = ast::Unsimplified::Binary(
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('A', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('a', 0).strict().unwrap(),
             )),
             ast::UnsimplifiedInfix::Times,
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('B', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('b', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::Times,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('C', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('c', 0).strict().unwrap(),
                 )),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "A * (B * C)");
+        assert_eq!(printed, "a * (b * c)");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -391,23 +419,23 @@ mod reduced {
         let tree = ast::Unsimplified::Unary(
             ast::UnsimplifiedPrefix::Bang,
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::Times,
                 Box::new(ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('B', 0).strict().unwrap(),
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('b', 0).strict().unwrap(),
                     )),
                     ast::UnsimplifiedInfix::Times,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('C', 0).strict().unwrap(),
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('c', 0).strict().unwrap(),
                     )),
                 )),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "!(A * (B * C))");
+        assert_eq!(printed, "!(a * (b * c))");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -415,28 +443,28 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_7() {
         let tree = ast::Unsimplified::Binary(
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('A', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('a', 0).strict().unwrap(),
             )),
             ast::UnsimplifiedInfix::Plus,
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('B', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('b', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::With,
                 Box::new(ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('C', 0).strict().unwrap(),
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('c', 0).strict().unwrap(),
                     )),
                     ast::UnsimplifiedInfix::Par,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('D', 0).strict().unwrap(),
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('d', 0).strict().unwrap(),
                     )),
                 )),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "A + B & C @ D");
+        assert_eq!(printed, "a + b & c @ d");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -444,16 +472,67 @@ mod reduced {
     #[test]
     fn roundtrip_expr_bytes_8() {
         let tree = ast::Unsimplified::Binary(
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('A', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('a', 0).strict().unwrap(),
             )),
             ast::UnsimplifiedInfix::Lollipop,
-            Box::new(ast::Unsimplified::Value(
-                Name::from_char('B', 0).strict().unwrap(),
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_char('b', 0).strict().unwrap(),
             )),
         );
         let printed = format!("{tree}");
-        assert_eq!(printed, "A -> B");
+        assert_eq!(printed, "a -> b");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
+    fn roundtrip_expr_bytes_9() {
+        let tree = ast::Unsimplified::Unary(
+            ast::UnsimplifiedPrefix::Bang,
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Atomic(Atomic::Zero)),
+                ast::UnsimplifiedInfix::Plus,
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', usize::MAX).strict().unwrap(),
+                )),
+            )),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "!(0 + a)");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
+    fn roundtrip_expr_bytes_10() {
+        let tree = ast::Unsimplified::Binary(
+            Box::new(ast::Unsimplified::Binary(
+                Box::new(ast::Unsimplified::Atomic(Atomic::Zero)),
+                ast::UnsimplifiedInfix::Plus,
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', usize::MAX).strict().unwrap(),
+                )),
+            )),
+            ast::UnsimplifiedInfix::With,
+            Box::new(ast::Unsimplified::Atomic(Atomic::Zero)),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "(0 + a) & 0");
+        let parsed = parse(printed.chars());
+        assert_eq!(parsed, Triage::Okay(tree));
+    }
+
+    #[test]
+    fn roundtrip_expr_bytes_11() {
+        let tree = ast::Unsimplified::Unary(
+            ast::UnsimplifiedPrefix::Bang,
+            Box::new(ast::Unsimplified::Atomic(
+                Atomic::from_str("aa").strict().unwrap(),
+            )),
+        );
+        let printed = format!("{tree}");
+        assert_eq!(printed, "!aa");
         let parsed = parse(printed.chars());
         assert_eq!(parsed, Triage::Okay(tree));
     }
@@ -462,9 +541,9 @@ mod reduced {
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_1() {
         assert_eq!(
-            parse("A ".chars()),
+            parse("a ".chars()),
             Triage::Warn(
-                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Atomic(Atomic::from_char('a', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::TrailingSpace,
                     index: usize::MAX,
@@ -477,15 +556,15 @@ mod reduced {
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_2() {
         assert_eq!(
-            parse("A* B".chars()),
+            parse("a* b".chars()),
             Triage::Warn(
                 ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('A', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('a', 0).strict().unwrap()
                     )),
                     ast::UnsimplifiedInfix::Times,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('B', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('b', 0).strict().unwrap()
                     )),
                 ),
                 Spanned {
@@ -500,15 +579,15 @@ mod reduced {
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_3() {
         assert_eq!(
-            parse("A *B".chars()),
+            parse("a *b".chars()),
             Triage::Warn(
                 ast::Unsimplified::Binary(
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('A', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('a', 0).strict().unwrap()
                     )),
                     ast::UnsimplifiedInfix::Times,
-                    Box::new(ast::Unsimplified::Value(
-                        Name::from_char('B', 0).strict().unwrap()
+                    Box::new(ast::Unsimplified::Atomic(
+                        Atomic::from_char('b', 0).strict().unwrap()
                     )),
                 ),
                 Spanned {
@@ -523,9 +602,9 @@ mod reduced {
     #[allow(unused_results)]
     fn roundtrip_bytes_expr_4() {
         assert_eq!(
-            parse("(A)".chars()),
+            parse("(a)".chars()),
             Triage::Warn(
-                ast::Unsimplified::Value(Name::from_char('A', 0).strict().unwrap()),
+                ast::Unsimplified::Atomic(Atomic::from_char('a', 0).strict().unwrap()),
                 Spanned {
                     msg: parse::Warning::UnnecessaryParens,
                     index: 0, // TODO: arguable, could be 1
@@ -539,12 +618,12 @@ mod reduced {
         let orig = ast::Unsimplified::Unary(
             ast::UnsimplifiedPrefix::Dual,
             Box::new(ast::Unsimplified::Binary(
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
                 ast::UnsimplifiedInfix::Times,
-                Box::new(ast::Unsimplified::Value(
-                    Name::from_char('A', 0).strict().unwrap(),
+                Box::new(ast::Unsimplified::Atomic(
+                    Atomic::from_char('a', 0).strict().unwrap(),
                 )),
             )),
         );
@@ -578,7 +657,7 @@ mod systematic {
         #[inline(always)]
         fn from(value: Character) -> Self {
             match value {
-                Character::A => 'A',
+                Character::A => 'a',
                 Character::Unary => '!',
                 Character::Binary => '*',
                 Character::LParen => '(',

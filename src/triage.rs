@@ -9,6 +9,7 @@
 use core::fmt::Display;
 
 /// Result, error, _**or** warning_.
+#[must_use]
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Triage<T, W: Ord + Display, E: Display> {

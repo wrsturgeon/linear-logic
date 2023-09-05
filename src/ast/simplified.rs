@@ -7,7 +7,7 @@
 //! Simplified linear-logic expressions as heap trees.
 
 use crate::ast::{
-    Funky, FunkyInfix, Name, SimplifiedInfix as Infix, SimplifiedPrefix as Prefix, Unsimplified,
+    Atomic, Funky, FunkyInfix, SimplifiedInfix as Infix, SimplifiedPrefix as Prefix, Unsimplified,
     UnsimplifiedPrefix,
 };
 
@@ -15,10 +15,10 @@ use crate::ast::{
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Simplified {
-    /// Raw name: e.g. `A`.
-    Value(Name),
+    /// Raw value: e.g. `A`, `0`, bottom, etc.
+    Atomic(Atomic),
     /// Dual of a raw value: e.g. `~A`.
-    Dual(Name),
+    Dual(String),
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Simplified>),
     /// Binary operation: e.g. `A * B`.
@@ -29,10 +29,10 @@ impl From<Simplified> for Unsimplified {
     #[inline]
     fn from(value: Simplified) -> Self {
         match value {
-            Simplified::Value(name) => Unsimplified::Value(name),
+            Simplified::Atomic(atom) => Unsimplified::Atomic(atom),
             Simplified::Dual(name) => Unsimplified::Unary(
                 UnsimplifiedPrefix::Dual,
-                Box::new(Unsimplified::Value(name)),
+                Box::new(Unsimplified::Atomic(Atomic::Bound(name))),
             ),
             Simplified::Unary(op, arg) => Unsimplified::Unary(op.into(), Box::new((*arg).into())),
             Simplified::Binary(lhs, op, rhs) => {
@@ -43,7 +43,8 @@ impl From<Simplified> for Unsimplified {
 }
 
 impl core::fmt::Display for Simplified {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(&Unsimplified::from(self.clone()), f)
     }
 }
@@ -54,8 +55,8 @@ impl Simplified {
     #[must_use]
     pub fn dual(self) -> Self {
         match self {
-            Self::Value(name) => Self::Dual(name),
-            Self::Dual(name) => Self::Value(name),
+            Self::Atomic(atom) => atom.simplified_dual(),
+            Self::Dual(name) => Self::Atomic(Atomic::Bound(name)),
             Self::Unary(op, arg) => Self::Unary(op.dual(), Box::new(arg.dual())),
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Plus => {
@@ -78,7 +79,7 @@ impl Simplified {
     #[must_use]
     pub fn funk(self) -> Funky {
         match self {
-            Self::Value(name) => Funky::Value(name),
+            Self::Atomic(atom) => Funky::Atomic(atom),
             Self::Dual(name) => Funky::Dual(name),
             Self::Unary(op, arg) => Funky::Unary(op, Box::new(arg.funk())),
             Self::Binary(lhs, op, rhs) => match op {
@@ -116,38 +117,43 @@ impl quickcheck::Arbitrary for Simplified {
         g.choose(
             &[
                 (|s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1));
-                    let name = Name::arbitrary(&mut r);
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(1));
                     if bool::arbitrary(&mut r) {
-                        Simplified::Value(name)
+                        Simplified::Atomic(Atomic::arbitrary(&mut r))
                     } else {
-                        Simplified::Dual(name)
+                        let st = String::arbitrary(&mut r);
+                        let mut acc = Atomic::Bound(String::new());
+                        for c in st.chars() {
+                            #[allow(clippy::let_underscore_must_use)]
+                            let _ = acc.push::<core::convert::Infallible>(c, usize::MAX);
+                        }
+                        Simplified::Dual(acc.to_string())
                     }
                 }) as fn(usize) -> Self,
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1));
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(1));
                     Simplified::Unary(Prefix::arbitrary(&mut r), Box::arbitrary(&mut r))
                 },
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1) >> 1);
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(2) >> 1);
                     Simplified::Binary(
                         Box::arbitrary(&mut r),
                         Infix::arbitrary(&mut r),
                         Box::arbitrary(&mut r),
                     )
                 },
-            ][..g.size().min(3)],
+            ][..g.size().clamp(1, 3)],
         )
         .unwrap()(g.size())
     }
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            &Simplified::Value(c) => Box::new(c.shrink().map(Simplified::Value)),
-            &Simplified::Dual(c) => Box::new(
-                Simplified::Value(c)
+            &Simplified::Atomic(ref atom) => Box::new(atom.shrink().map(Simplified::Atomic)),
+            &Simplified::Dual(ref name) => Box::new(
+                Simplified::Atomic(Atomic::Top)
                     .shrink()
-                    .chain(c.shrink().map(Simplified::Dual)),
+                    .chain(name.shrink().map(Simplified::Dual)),
             ),
             &Simplified::Unary(prefix, ref arg) => Box::new(
                 arg.as_ref().shrink().chain(

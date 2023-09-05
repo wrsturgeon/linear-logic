@@ -8,7 +8,7 @@
 
 use crate::{
     ast::{
-        Funky, FunkyInfix, Name, Nonbinary, Simplified, SimplifiedInfix, SimplifiedPrefix,
+        Atomic, Funky, FunkyInfix, Nonbinary, Simplified, SimplifiedInfix, SimplifiedPrefix,
         UnsimplifiedInfix as Infix, UnsimplifiedPrefix as Prefix,
     },
     parse, Spanned, Triage,
@@ -18,8 +18,8 @@ use crate::{
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum SyntaxAware {
-    /// Raw name: e.g. `A`.
-    Value(Name),
+    /// Raw value: e.g. `A`, `0`, bottom, etc.
+    Atomic(Atomic),
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Nonbinary>),
     /// Binary operation: e.g. `A * B`.
@@ -31,23 +31,24 @@ pub(crate) enum SyntaxAware {
 impl SyntaxAware {
     /// Convert to a tree by removing parentheses and warn if parentheses were unnecessary.
     #[inline]
-    #[must_use]
     #[allow(clippy::only_used_in_recursion, clippy::similar_names)]
-    pub(crate) fn into_tree(
+    pub(crate) fn into_unsimplified(
         self,
         lnbr: Option<Infix>,
         rnbr: Option<Infix>,
     ) -> Triage<Unsimplified, parse::Warning, parse::Error> {
         match self {
-            SyntaxAware::Value(v) => Triage::Okay(Unsimplified::Value(v)),
+            SyntaxAware::Atomic(v) => Triage::Okay(Unsimplified::Atomic(v)),
             SyntaxAware::Unary(op, arg) => arg
                 .into_unsimplified()
                 .map(|a| Unsimplified::Unary(op, Box::new(a))),
-            SyntaxAware::Binary(lhs, op, rhs) => lhs.into_tree(lnbr, Some(op)).and_then(|tl| {
-                rhs.into_tree(Some(op), rnbr).and_then(|tr| {
-                    Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
+            SyntaxAware::Binary(lhs, op, rhs) => {
+                lhs.into_unsimplified(lnbr, Some(op)).and_then(|tl| {
+                    rhs.into_unsimplified(Some(op), rnbr).and_then(|tr| {
+                        Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
+                    })
                 })
-            }),
+            }
             SyntaxAware::Parenthesized(lhs, op, rhs, index) => if lnbr
                 .map_or(false, |other| op.weaker_to_the_right_of(other))
                 || rnbr.map_or(false, |other| op.weaker_to_the_left_of(other))
@@ -63,12 +64,24 @@ impl SyntaxAware {
                 )
             }
             .and_then(|()| {
-                lhs.into_tree(None, Some(op)).and_then(|tl| {
-                    rhs.into_tree(Some(op), None).and_then(|tr| {
+                lhs.into_unsimplified(None, Some(op)).and_then(|tl| {
+                    rhs.into_unsimplified(Some(op), None).and_then(|tr| {
                         Triage::Okay(Unsimplified::Binary(Box::new(tl), op, Box::new(tr)))
                     })
                 })
             }),
+        }
+    }
+
+    /// Check if we might still be reading a name.
+    /// If we are, return a mutable reference to it.
+    #[inline]
+    pub(crate) fn reading_name(&mut self) -> Option<&mut Atomic> {
+        match self {
+            &mut Self::Atomic(ref mut atom) => atom.reading_name(),
+            &mut Self::Unary(_, ref mut nb) => nb.reading_name(),
+            &mut Self::Binary(_, _, ref mut rhs) => rhs.reading_name(),
+            &mut Self::Parenthesized(..) => None,
         }
     }
 }
@@ -77,8 +90,8 @@ impl SyntaxAware {
 #[allow(clippy::exhaustive_enums)]
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum Unsimplified {
-    /// Raw name: e.g. `A`.
-    Value(Name),
+    /// Raw atom: e.g. `A`.
+    Atomic(Atomic),
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Unsimplified>),
     /// Binary operation: e.g. `A * B`.
@@ -91,7 +104,7 @@ impl Unsimplified {
     #[must_use]
     pub const fn top_bin_op(&self) -> Option<Infix> {
         match self {
-            &Unsimplified::Value(_) => None,
+            &Unsimplified::Atomic(_) => None,
             &Unsimplified::Unary(_, ref arg) => arg.top_bin_op(),
             &Unsimplified::Binary(_, op, _) => Some(op),
         }
@@ -106,7 +119,7 @@ impl Unsimplified {
     )]
     pub fn display(&self, lnbr: Option<Infix>, rnbr: Option<Infix>) -> (String, Option<Infix>) {
         match self {
-            &Unsimplified::Value(name) => (core::iter::once(char::from(name)).collect(), None),
+            &Unsimplified::Atomic(ref atomic) => (atomic.to_string(), None),
             &Unsimplified::Unary(op, ref arg) => {
                 if let &Unsimplified::Binary(_, _, _) = arg.as_ref() {
                     (
@@ -156,7 +169,7 @@ impl Unsimplified {
     #[must_use]
     fn simplified_dual(self) -> Simplified {
         match self {
-            Self::Value(name) => Simplified::Dual(name),
+            Self::Atomic(atom) => atom.simplified_dual(),
             Self::Unary(op, arg) => match op {
                 Prefix::Dual => arg.simplify(),
                 Prefix::Bang => {
@@ -200,7 +213,7 @@ impl Unsimplified {
     #[must_use]
     pub fn simplify(self) -> Simplified {
         match self {
-            Self::Value(name) => Simplified::Value(name),
+            Self::Atomic(atom) => Simplified::Atomic(atom),
             Self::Unary(op, arg) => match op {
                 Prefix::Bang => Simplified::Unary(SimplifiedPrefix::Bang, Box::new(arg.simplify())),
                 Prefix::Quest => {
@@ -242,7 +255,7 @@ impl Unsimplified {
     #[must_use]
     fn funky_dual(self) -> Funky {
         match self {
-            Self::Value(name) => Funky::Dual(name),
+            Self::Atomic(atom) => atom.funky_dual(),
             Self::Unary(op, arg) => match op {
                 Prefix::Dual => arg.funk(),
                 Prefix::Bang => Funky::Unary(SimplifiedPrefix::Quest, Box::new(arg.funky_dual())),
@@ -283,7 +296,7 @@ impl Unsimplified {
     #[must_use]
     pub fn funk(self) -> Funky {
         match self {
-            Self::Value(name) => Funky::Value(name),
+            Self::Atomic(atom) => Funky::Atomic(atom),
             Self::Unary(op, arg) => match op {
                 Prefix::Bang => Funky::Unary(SimplifiedPrefix::Bang, Box::new(arg.funk())),
                 Prefix::Quest => Funky::Unary(SimplifiedPrefix::Quest, Box::new(arg.funk())),
@@ -323,8 +336,8 @@ impl Unsimplified {
         #[allow(unsafe_code)]
         // SAFETY:
         // Duh.
-        let mut v = vec![Self::Value(unsafe {
-            Name::from_char('A', 0).strict().unwrap_unchecked()
+        let mut v = vec![Self::Atomic(unsafe {
+            Atomic::from_char('a', 0).strict().unwrap_unchecked()
         })];
         for t in Self::exhaustive_to_length(
             match len.saturating_sub(1) {
@@ -374,30 +387,30 @@ impl quickcheck::Arbitrary for Unsimplified {
         g.choose(
             &[
                 (|s| {
-                    Unsimplified::Value(Name::arbitrary(&mut quickcheck::Gen::new(
-                        s.saturating_sub(1),
+                    Unsimplified::Atomic(Atomic::arbitrary(&mut quickcheck::Gen::new(
+                        s.saturating_sub(1).max(1),
                     )))
                 }) as fn(usize) -> Self,
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1));
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(1));
                     Unsimplified::Unary(Prefix::arbitrary(&mut r), Box::arbitrary(&mut r))
                 },
                 |s| {
-                    let mut r = quickcheck::Gen::new(s.saturating_sub(1) >> 1);
+                    let mut r = quickcheck::Gen::new(s.saturating_sub(1).max(2) >> 1);
                     Unsimplified::Binary(
                         Box::arbitrary(&mut r),
                         Infix::arbitrary(&mut r),
                         Box::arbitrary(&mut r),
                     )
                 },
-            ][..g.size().min(3)],
+            ][..g.size().clamp(1, 3)],
         )
         .unwrap()(g.size())
     }
     #[inline]
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            &Unsimplified::Value(c) => Box::new(c.shrink().map(Unsimplified::Value)),
+            &Unsimplified::Atomic(ref atom) => Box::new(atom.shrink().map(Unsimplified::Atomic)),
             &Unsimplified::Unary(prefix, ref arg) => Box::new(
                 arg.as_ref().shrink().chain(
                     (prefix, arg.clone())
@@ -406,9 +419,9 @@ impl quickcheck::Arbitrary for Unsimplified {
                 ),
             ),
             &Unsimplified::Binary(ref lhs, infix, ref rhs) => Box::new(
-                Unsimplified::Unary(Prefix::Quest, lhs.clone())
+                Unsimplified::Unary(Prefix::Dual, lhs.clone())
                     .shrink()
-                    .chain(Unsimplified::Unary(Prefix::Quest, rhs.clone()).shrink())
+                    .chain(Unsimplified::Unary(Prefix::Dual, rhs.clone()).shrink())
                     .chain(
                         (lhs.clone(), infix, rhs.clone())
                             .shrink()

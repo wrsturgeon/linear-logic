@@ -10,7 +10,7 @@
 
 use crate::{
     ast::{
-        unsimplified::SyntaxAware, Name, Nonbinary, Unsimplified, UnsimplifiedInfix as Infix,
+        unsimplified::SyntaxAware, Atomic, Nonbinary, Unsimplified, UnsimplifiedInfix as Infix,
         UnsimplifiedPrefix as Prefix, PAR,
     },
     Spanned, Triage,
@@ -146,11 +146,12 @@ where
     I::Item: Into<char>,
 {
     start(&mut i.into_iter().enumerate(), &mut State::default())
-        .and_then(|sa| sa.into_tree(None, None))
+        .and_then(|sa| sa.into_unsimplified(None, None))
 }
 
 /// Parse a linear-logic expression from the beginning.
 #[inline]
+#[allow(clippy::too_many_lines)]
 fn merged<I: Iterator>(
     iter: &mut Enumerate<I>,
     state: &mut State,
@@ -193,8 +194,8 @@ where
                         SyntaxAware::Binary(lhs, op, rhs) => {
                             Triage::Okay(Nonbinary::Parenthesized(lhs, op, rhs, index))
                         }
-                        SyntaxAware::Value(name) => Triage::Warn(
-                            Nonbinary::Value(name),
+                        SyntaxAware::Atomic(atom) => Triage::Warn(
+                            Nonbinary::Atomic(atom),
                             Spanned {
                                 msg: Warning::UnnecessaryParens,
                                 index,
@@ -250,13 +251,75 @@ where
                     }
                     continue;
                 }
-                name => state.check_sep(index).and_then(|()| {
+                '0' => state.check_sep(index).map(|()| {
                     state.separated = false;
-                    Name::from_char(name, index).map(Nonbinary::Value)
+                    Nonbinary::Atomic(Atomic::Zero)
+                }),
+                '1' => state.check_sep(index).map(|()| {
+                    state.separated = false;
+                    Nonbinary::Atomic(Atomic::One)
+                }),
+                '_' => state.check_sep(index).map(|()| {
+                    state.separated = false;
+                    Nonbinary::Atomic(Atomic::Bottom)
+                }),
+                'T' => state.check_sep(index).map(|()| {
+                    state.separated = false;
+                    Nonbinary::Atomic(Atomic::Top)
+                }),
+                other => state.check_sep(index).and_then(|()| {
+                    state.separated = false;
+                    Atomic::from_char(other, index).map(Nonbinary::Atomic)
                 }),
             },
         };
         return warn.and_then(|()| ok);
+    }
+}
+
+/// Postmortem of a premature ending that might be acceptable.
+#[inline]
+fn postmortem<T>(state: &mut State, value: T) -> Triage<T, Warning, Error> {
+    if state.depth != 0 {
+        Triage::Error(Spanned {
+            msg: Error::MissingRightParen,
+            index: usize::MAX,
+        })
+    } else if state.separated {
+        Triage::Warn(
+            value,
+            Spanned {
+                msg: Warning::TrailingSpace,
+                index: usize::MAX,
+            },
+        )
+    } else {
+        Triage::Okay(value)
+    }
+}
+
+/// After a potentially valid closing parenthesis.
+#[inline]
+fn close_paren<T>(state: &mut State, value: T, index: usize) -> Triage<T, Warning, Error> {
+    if let Some(decr) = state.depth.checked_sub(1) {
+        state.depth = decr;
+        if state.separated {
+            state.separated = false;
+            Triage::Warn(
+                value,
+                Spanned {
+                    msg: Warning::TrailingSpace,
+                    index,
+                },
+            )
+        } else {
+            Triage::Okay(value)
+        }
+    } else {
+        Triage::Error(Spanned {
+            msg: Error::MissingLeftParen,
+            index,
+        })
     }
 }
 
@@ -286,7 +349,7 @@ where
     #[allow(clippy::shadow_unrelated)]
     let mut warn = Triage::Okay(());
     loop {
-        match next_op(iter, state) {
+        match next_op(iter, state, &mut acc) {
             Triage::Okay(None) => return warn.map(|()| acc),
             Triage::Warn(None, w) => {
                 return warn.max(Triage::Warn((), w)).map(|()| acc);
@@ -321,14 +384,16 @@ where
 fn next_op<I: Iterator>(
     iter: &mut Enumerate<I>,
     state: &mut State,
+    acc: &mut SyntaxAware,
 ) -> Triage<Option<(Infix, Nonbinary)>, Warning, Error>
 where
     I::Item: Into<char>,
 {
     let mut warn = Triage::Okay(());
     loop {
-        let ok = if let Some((index, c)) = iter.next() {
-            match c.into() {
+        let ok = match iter.next() {
+            None => postmortem(state, None),
+            Some((index, c)) => match c.into() {
                 ' ' => {
                     if state.separated {
                         warn = warn.max(Triage::Warn(
@@ -378,48 +443,27 @@ where
                         }
                     }
                 }),
-                ')' => {
-                    if let Some(decr) = state.depth.checked_sub(1) {
-                        state.depth = decr;
-                        if state.separated {
-                            state.separated = false;
-                            Triage::Warn(
-                                None,
-                                Spanned {
-                                    msg: Warning::TrailingSpace,
-                                    index,
-                                },
-                            )
+                ')' => close_paren(state, None, index),
+                other => {
+                    if let Some(name) = acc.reading_name() {
+                        if let Triage::Okay(()) =
+                            name.push::<core::convert::Infallible>(other, index)
+                        {
+                            continue;
                         } else {
-                            Triage::Okay(None)
+                            Triage::Error(Spanned {
+                                msg: Error::UnrecognizedInfixOperator,
+                                index,
+                            })
                         }
                     } else {
                         Triage::Error(Spanned {
-                            msg: Error::MissingLeftParen,
+                            msg: Error::UnrecognizedInfixOperator,
                             index,
                         })
                     }
                 }
-                _ => Triage::Error(Spanned {
-                    msg: Error::UnrecognizedInfixOperator,
-                    index,
-                }),
-            }
-        } else if state.depth != 0 {
-            Triage::Error(Spanned {
-                msg: Error::MissingRightParen,
-                index: usize::MAX,
-            })
-        } else if state.separated {
-            Triage::Warn(
-                None,
-                Spanned {
-                    msg: Warning::TrailingSpace,
-                    index: usize::MAX,
-                },
-            )
-        } else {
-            Triage::Okay(None)
+            },
         };
         return warn.and_then(|()| ok);
     }
@@ -431,7 +475,7 @@ where
 fn fix_precedence(lhs: SyntaxAware, op: Infix, rhs: Nonbinary) -> SyntaxAware {
     match lhs {
         // No problem unless the left-hand side is a binary operation
-        SyntaxAware::Value(_)
+        SyntaxAware::Atomic(_)
         | SyntaxAware::Unary(_, _)
         | SyntaxAware::Parenthesized(_, _, _, _) => {
             SyntaxAware::Binary(Box::new(lhs), op, Box::new(rhs.into()))
