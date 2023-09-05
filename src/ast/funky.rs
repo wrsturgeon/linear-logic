@@ -120,6 +120,7 @@ impl Funky {
 
     /// Mutate leaves (names) with some function.
     #[inline]
+    #[must_use]
     pub fn map<F: Fn(String) -> String>(self, f: &F) -> Self {
         match self {
             Self::Atomic(atom) => Self::Atomic(atom.map(f)),
@@ -127,6 +128,21 @@ impl Funky {
             Self::Unary(op, nb) => Self::Unary(op, Box::new(nb.map(f))),
             Self::Binary(lhs, op, rhs) => {
                 Self::Binary(Box::new(lhs.map(f)), op, Box::new(rhs.map(f)))
+            }
+        }
+    }
+
+    /// Mutable references to all names.
+    #[inline]
+    pub fn names(&mut self) -> Vec<&mut String> {
+        match self {
+            &mut Self::Atomic(ref mut atom) => atom.names(),
+            &mut Self::Dual(ref mut name) => vec![name],
+            &mut Self::Unary(_, ref mut nb) => nb.names(),
+            &mut Self::Binary(ref mut lhs, _, ref mut rhs) => {
+                let mut v = lhs.names();
+                v.append(&mut rhs.names());
+                v
             }
         }
     }

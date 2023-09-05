@@ -446,22 +446,15 @@ where
                 ')' => close_paren(state, None, index),
                 other => {
                     if let Some(name) = acc.reading_name() {
-                        if let Triage::Okay(()) =
-                            name.push::<core::convert::Infallible>(other, index)
+                        if name.push::<core::convert::Infallible>(other, index) == Triage::Okay(())
                         {
                             continue;
-                        } else {
-                            Triage::Error(Spanned {
-                                msg: Error::UnrecognizedInfixOperator,
-                                index,
-                            })
                         }
-                    } else {
-                        Triage::Error(Spanned {
-                            msg: Error::UnrecognizedInfixOperator,
-                            index,
-                        })
                     }
+                    Triage::Error(Spanned {
+                        msg: Error::UnrecognizedInfixOperator,
+                        index,
+                    })
                 }
             },
         };

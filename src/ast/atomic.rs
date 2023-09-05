@@ -141,10 +141,20 @@ impl Atomic {
 
     /// Mutate leaves (names) with some function.
     #[inline]
+    #[must_use]
     pub fn map<F: Fn(String) -> String>(self, f: F) -> Self {
         match self {
             Self::Bound(s) => Self::Bound(f(s)),
             Self::Zero | Self::One | Self::Bottom | Self::Top => self,
+        }
+    }
+
+    /// Mutable references to all names.
+    #[inline]
+    pub fn names(&mut self) -> Vec<&mut String> {
+        match self {
+            &mut Self::Bound(ref mut s) => vec![s],
+            &mut (Self::Zero | Self::One | Self::Bottom | Self::Top) => vec![],
         }
     }
 }

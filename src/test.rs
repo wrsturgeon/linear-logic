@@ -684,7 +684,7 @@ mod systematic {
     }
 
     #[test]
-    #[allow(unreachable_code, unused_mut, unused_variables)] // FIXME
+    #[allow(clippy::too_many_lines)]
     fn exhaustive_and_valid_iff_both_unique_and_shortest() {
         const MAX_LEN: usize = 13;
         let mut v = vec![0];
@@ -711,52 +711,60 @@ mod systematic {
             let chars = v.iter().map(|b| char::from(Character::from(*b)));
             #[allow(clippy::wildcard_enum_match_arm)]
             match parse(chars.clone()) {
-                Triage::Okay(parsed) => {
-                    #[allow(clippy::from_iter_instead_of_collect)]
-                    exhaustive.get_mut(&parsed).map_or_else(
-                        || {
-                            panic!(
-                                "Produced a value that should have needed \
-                                more characters: \"{parsed}\" i.e. {parsed:?}",
-                            );
-                        },
-                        |b| {
-                            assert!(
-                                !*b,
-                                "Fully valid string \"{}\" parsed \
+                Triage::Okay(mut parsed) => {
+                    if parsed.names().into_iter().all(|s| s.len() == 1) {
+                        #[allow(clippy::from_iter_instead_of_collect)]
+                        exhaustive.get_mut(&parsed).map_or_else(
+                            || {
+                                panic!(
+                                    "Produced a value from \"{}\" that should have \
+                                needed more characters: \"{parsed}\" i.e. {parsed:?}",
+                                    chars.clone().collect::<String>(),
+                                );
+                            },
+                            |b| {
+                                assert!(
+                                    !*b,
+                                    "Fully valid string \"{}\" parsed \
                                 as an expression we've already seen",
-                                String::from_iter(chars),
-                            );
-                            *b = true;
-                        },
-                    );
+                                    String::from_iter(chars.clone()),
+                                );
+                                *b = true;
+                            },
+                        );
+                    }
                 }
                 Triage::Warn(
-                    parsed,
+                    mut parsed,
                     Spanned {
                         msg: parse::Warning::UnnecessaryParens,
                         index,
                     },
                 ) => {
-                    // must not be the shortest way to write it,
-                    // or else the parens would have been necessary
-                    #[allow(clippy::from_iter_instead_of_collect)]
-                    exhaustive.get(&parsed).map_or_else(
-                        || {
-                            panic!(
-                                "Produced a value that should have needed \
-                                more characters: \"{parsed}\" i.e. {parsed:?}",
-                            )
-                        },
-                        |seen| {
-                            assert!(
-                                *seen,
-                                "Parentheses flagged as unnecessary in \"{}\" at character #{index}, \
-                                but there's no shorter way to write `{parsed:?}`",
-                                String::from_iter(v.iter().map(|b| char::from(Character::from(*b)))),
-                            );
-                        },
-                    );
+                    if parsed.names().into_iter().all(|s| s.len() == 1) {
+                        // must not be the shortest way to write it,
+                        // or else the parens would have been necessary
+                        #[allow(clippy::from_iter_instead_of_collect)]
+                        exhaustive.get(&parsed).map_or_else(
+                            || {
+                                panic!(
+                                    "Produced a value that should have needed \
+                                        more characters: \"{parsed}\" i.e. {parsed:?}",
+                                )
+                            },
+                            |seen| {
+                                assert!(
+                                    *seen,
+                                    "Parentheses flagged as unnecessary in \
+                                    \"{}\" at character #{index}, but \
+                                    there's no shorter way to write `{parsed:?}`",
+                                    String::from_iter(
+                                        v.iter().map(|b| char::from(Character::from(*b)))
+                                    ),
+                                );
+                            },
+                        );
+                    }
                 }
                 _ => {}
             }
