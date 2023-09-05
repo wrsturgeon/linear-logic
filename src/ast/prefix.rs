@@ -14,6 +14,8 @@ pub enum Prefix {
     Bang,
     /// The "why not" operator, read as "quest."
     Quest,
+    /// The dual operator, written in linear logic as a raised bottom.
+    Dual,
 }
 
 impl core::fmt::Display for Prefix {
@@ -25,6 +27,7 @@ impl core::fmt::Display for Prefix {
             match self {
                 &Prefix::Bang => '!',
                 &Prefix::Quest => '?',
+                &Prefix::Dual => '~',
             }
         )
     }
@@ -42,6 +45,7 @@ impl quickcheck::Arbitrary for Prefix {
         match self {
             &Prefix::Bang => Box::new(core::iter::empty()),
             &Prefix::Quest => Box::new(core::iter::once(Prefix::Bang)),
+            &Prefix::Dual => Box::new([Prefix::Bang, Prefix::Quest].into_iter()),
         }
     }
 }

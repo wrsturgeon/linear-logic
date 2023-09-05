@@ -152,6 +152,9 @@ where
                 '?' => state.check_sep(index).and_then(|_| {
                     nonbinary(iter, state).map(|nb| Nonbinary::Unary(Prefix::Quest, Box::new(nb)))
                 }),
+                '~' => state.check_sep(index).and_then(|_| {
+                    nonbinary(iter, state).map(|nb| Nonbinary::Unary(Prefix::Dual, Box::new(nb)))
+                }),
                 '(' => state.check_sep(index).and_then(|_| {
                     if let Some(incr) = state.depth.checked_add(1) {
                         state.depth = incr;
