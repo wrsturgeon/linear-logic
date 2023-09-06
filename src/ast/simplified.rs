@@ -21,6 +21,14 @@ pub enum Simplified {
     Dual(String),
     /// Unary operation: e.g. `?A`.
     Unary(Prefix, Box<Simplified>),
+    // /// Additive disjunction, read as "plus."
+    // Plus(Box<NotZero>, Box<NotZero>),
+    // /// Additive conjunction, read as "with."
+    // With(Box<NotTop>, Box<NotTop>),
+    // /// Multiplicative disjunction, read as "par."
+    // Par(Box<NotBottom>, Box<NotBottom>),
+    // /// Multiplicative conjunction, read as "times" or "tensor."
+    // Times(Box<NotOne>, Box<NotOne>),
     /// Binary operation: e.g. `A * B`.
     Binary(Box<Simplified>, Infix, Box<Simplified>),
 }
@@ -84,9 +92,9 @@ impl Simplified {
             Self::Unary(op, arg) => Funky::Unary(op, Box::new(arg.funk())),
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Par => Funky::Binary(
-                    Box::new(lhs.funk()),
+                    Box::new(lhs.dual().funk()),
                     FunkyInfix::Lollipop,
-                    Box::new(rhs.dual().funk()),
+                    Box::new(rhs.funk()),
                 ),
                 Infix::Plus => {
                     Funky::Binary(Box::new(lhs.funk()), FunkyInfix::Plus, Box::new(rhs.funk()))

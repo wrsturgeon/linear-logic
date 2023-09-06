@@ -18,13 +18,13 @@ use crate::{
 pub enum Atomic {
     /// A bound variable name.
     Bound(String),
-    /// `0`.
+    /// `0`, the unit for `+`.
     Zero,
-    /// `1`.
+    /// `1`, the unit for `*`.
     One,
-    /// Bottom type, usually represented with an up-tack.
+    /// Bottom (usually represented with an up-tack), the unit for par.
     Bottom,
-    /// Top type, dual of bottom.
+    /// Top, the unit for `&`.
     Top,
 }
 

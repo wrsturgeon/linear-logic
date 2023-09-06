@@ -181,7 +181,7 @@ impl Unsimplified {
             },
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => {
-                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                    Self::Binary(Box::new(Self::Unary(Prefix::Dual, lhs)), Infix::Par, rhs)
                         .simplified_dual()
                 }
                 Infix::Plus => Simplified::Binary(
@@ -223,7 +223,7 @@ impl Unsimplified {
             },
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => {
-                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                    Self::Binary(Box::new(Self::Unary(Prefix::Dual, lhs)), Infix::Par, rhs)
                         .simplify()
                 }
                 Infix::Plus => Simplified::Binary(
@@ -263,7 +263,7 @@ impl Unsimplified {
             },
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => {
-                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs)))
+                    Self::Binary(Box::new(Self::Unary(Prefix::Dual, lhs)), Infix::Par, rhs)
                         .funky_dual()
                 }
                 Infix::Plus => Funky::Binary(
@@ -304,7 +304,7 @@ impl Unsimplified {
             },
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => {
-                    Self::Binary(lhs, Infix::Par, Box::new(Self::Unary(Prefix::Dual, rhs))).funk()
+                    Self::Binary(Box::new(Self::Unary(Prefix::Dual, lhs)), Infix::Par, rhs).funk()
                 }
                 Infix::Plus => {
                     Funky::Binary(Box::new(lhs.funk()), FunkyInfix::Plus, Box::new(rhs.funk()))
@@ -318,12 +318,38 @@ impl Unsimplified {
                     Box::new(rhs.funk()),
                 ),
                 Infix::Par => Funky::Binary(
-                    Box::new(lhs.funk()),
+                    Box::new(lhs.funky_dual()),
                     FunkyInfix::Lollipop,
-                    Box::new(rhs.funky_dual()),
+                    Box::new(rhs.funk()),
                 ),
             },
         }
+    }
+
+    #[inline]
+    #[must_use]
+    #[cfg(test)]
+    pub fn exhaustive_to_depth(depth: usize) -> Vec<Self> {
+        depth.checked_sub(1).map_or(vec![], |next_depth| {
+            let rec = Self::exhaustive_to_depth(next_depth).into_iter();
+            core::iter::once(Self::Atomic(
+                #[allow(unsafe_code)]
+                // SAFETY:
+                // Duh.
+                unsafe {
+                    Atomic::from_char('A', usize::MAX)
+                        .strict()
+                        .unwrap_unchecked()
+                },
+            ))
+            .chain(rec.clone().map(|t| Self::Unary(Prefix::Bang, Box::new(t))))
+            .chain(rec.clone().flat_map(move |lhs| {
+                rec.clone().map(move |rhs| {
+                    Self::Binary(Box::new(lhs.clone()), Infix::Times, Box::new(rhs))
+                })
+            }))
+            .collect()
+        })
     }
 
     #[inline]

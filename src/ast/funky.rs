@@ -60,9 +60,9 @@ impl Funky {
             Self::Unary(op, arg) => Self::Unary(op.dual(), Box::new(arg.dual())),
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => Simplified::Binary(
-                    Box::new(lhs.simplify()),
+                    Box::new(lhs.simplify().dual()),
                     SimplifiedInfix::Par,
-                    Box::new(rhs.simplify().dual()),
+                    Box::new(rhs.simplify()),
                 )
                 .dual()
                 .funk(),
@@ -92,12 +92,9 @@ impl Funky {
             Self::Unary(op, arg) => Simplified::Unary(op, Box::new(arg.simplify())),
             Self::Binary(lhs, op, rhs) => match op {
                 Infix::Lollipop => Simplified::Binary(
-                    Box::new(lhs.simplify()),
+                    Box::new(lhs.simplify().dual()),
                     SimplifiedInfix::Par,
-                    Box::new(
-                        Unsimplified::Unary(UnsimplifiedPrefix::Dual, Box::new((*rhs).into()))
-                            .simplify(),
-                    ),
+                    Box::new(rhs.simplify()),
                 ),
                 Infix::Plus => Simplified::Binary(
                     Box::new(lhs.simplify()),
